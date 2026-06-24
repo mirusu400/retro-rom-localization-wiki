@@ -91,17 +91,100 @@ text data.
 ### Custom / proprietary compression
 
 Older platforms (NES, GB, SNES) predate standardized compression SWIs. Games on these systems
-use **custom compression routines** — there is no universal signature. Common clues:
+use **custom compression routines** -- there is no universal signature and each game (or
+developer) may use a different scheme. You must reverse-engineer the decompression routine
+per game.
 
-- A block of data that looks "random" in a hex editor (high entropy), adjacent to
-  clearly structured data.
-- A subroutine that reads byte-by-byte from ROM and writes to a WRAM buffer before the data
-  is used. Set a read breakpoint on the suspicious block and trace the decompression logic.
-- SNES games sometimes use a variant of LZ similar to the GBA format, but without the
-  standard header.
+#### NES compression patterns
 
-For custom compression, you must reverse-engineer the algorithm by reading the decompression
-routine's assembly. Pseudocode it, then write a matching compressor.
+NES games using CHR ROM store tiles uncompressed (the PPU reads CHR ROM directly). Games
+using **CHR RAM** copy tile data from PRG ROM to CHR RAM at runtime and can decompress
+during the copy. Common NES compression formats
+([NESdev Wiki: Tile compression](https://www.nesdev.org/wiki/Tile_compression)):
+
+- **Byte-level RLE** -- the simplest and most common. A flag byte distinguishes literal runs
+  from repeated-byte runs. Konami NES titles use a well-known RLE variant. Nintendo's own
+  "Stripe Image" RLE appears in their arcade ports and Mario games.
+- **PackBits** -- Apple's RLE format, adapted for NES. A signed length byte encodes either a
+  literal run (positive) or a repeated byte (negative). Worst-case expansion is 1 byte per
+  128 bytes.
+- **PB53** -- operates on fixed 16-byte (one tile plane) units rather than freeform runs,
+  making it easy to feed the PPU during vblank in fixed-size packets.
+- **Simple LZSS** -- rare on NES because the 6502 can only shift one bit per instruction,
+  making bit-field parsing slow. Where it appears (e.g., Zelda: Oracle games on GBC), the
+  match/offset layout is game-specific.
+
+Bit-oriented compression is uncommon on NES/GB because the 6502 and SM83 lack a barrel
+shifter; shifting bits is cycle-expensive.
+
+#### SNES compression patterns
+
+SNES games almost always store tile data in VRAM (no CHR ROM), so compression is widespread.
+Many SNES titles use an LZSS variant with a 1-bit literal/match flag and a 16-bit code for
+match offset and length, but the **bit layout within that 16-bit code varies per game**.
+Common patterns:
+
+- **HAL Laboratory format** -- an RLE/LZ77 hybrid used across HAL's NES, SNES, and GB titles
+  (Kirby, EarthBound/Mother 2). Supports byte/bit reversal of sequences. Open-source
+  tooling: [exhal / inhal](https://github.com/devinacker/exhal).
+- **Konami SNES format** -- a proprietary LZ scheme used in titles like TMNT: Turtles in Time.
+  Dedicated compressor/decompressor available on
+  [RHDN](https://www.romhacking.net/utilities/1102/).
+- **Koei format** -- used for graphics and some text in Koei strategy games (Romance of the
+  Three Kingdoms III/IV, Genghis Khan II). Dedicated tool on
+  [RHDN](https://www.romhacking.net/utilities/1083/).
+- **S-DD1 on-the-fly decompression** -- a special cartridge chip (Star Ocean, Street Fighter
+  Alpha 2) that decompresses data at DMA speed directly to the PPU. Patching S-DD1 compressed
+  data requires understanding the chip's algorithm; most hackers decompress the full asset and
+  bypass the chip.
+
+Unlike GBA/NDS, there is **no standard header byte** to scan for. You must trace the code.
+
+#### GB / GBC compression
+
+GB games face the same constraints as NES CHR-RAM games: tile data is copied to VRAM and can
+be decompressed during the transfer. RLE and simple LZ are common. The Zelda Oracle games
+use a per-block format selector (uncompressed, short-word LZ, long-word LZ, or common-byte
+bitmask).
+
+#### How to trace a custom decompressor
+
+When there is no standard signature to scan for, use an emulator debugger:
+
+1. **Find the compressed data.** Look for high-entropy blocks adjacent to structured data in
+   the ROM. If you know the decompressed result (e.g., a font tileset visible in VRAM), note
+   its VRAM address.
+2. **Set a write breakpoint** on the WRAM or VRAM destination where the decompressed data
+   appears. On NES, this is often a write to `$2007` (PPUDATA) or a WRAM staging buffer. On
+   SNES, watch DMA destination registers or the WRAM buffer address.
+3. **Trigger the decompression** (load the relevant screen/scene). The debugger breaks inside
+   the decompression routine.
+4. **Set a read breakpoint** on the source address in ROM that the routine is reading from.
+   This confirms exactly which ROM bytes are compressed input.
+5. **Single-step through the routine** and pseudocode it. Key things to identify:
+   - How does it distinguish literals from back-references (flag byte? flag bits?)?
+   - What is the match-length and offset encoding (how many bits each, what bias)?
+   - Is there an end-of-stream sentinel or does a header specify the output size?
+   - Does it operate on bytes, nibbles, or bits?
+6. **Write a matching decompressor** in Python (or similar) and verify that your output is
+   byte-identical to what the game produces. Then write the inverse compressor.
+
+Tools like **bsnes-plus** (SNES), **FCEUX** / **Mesen2** (NES), and **SameBoy** / **mGBA**
+(GB/GBC) all support the memory breakpoints and trace logging needed for this workflow.
+
+#### Existing game-specific compressor tools
+
+The ROM hacking community has already reverse-engineered compression for many popular titles.
+Before writing your own, check
+[RHDN's compression utilities section](https://www.romhacking.net/?page=utilities&category=22)
+for an existing tool. Notable examples:
+
+| Tool | Games / Developer | Link |
+|------|-------------------|------|
+| **exhal / inhal** | HAL Laboratory titles (Kirby, EarthBound) | [github.com/devinacker/exhal](https://github.com/devinacker/exhal) |
+| **Konami SNES Compressor** | Konami SNES titles | [romhacking.net/utilities/1102](https://www.romhacking.net/utilities/1102/) |
+| **Koei Decompress** | Koei SNES strategy games | [romhacking.net/utilities/1083](https://www.romhacking.net/utilities/1083/) |
+| **Chrono Compressor** | Chrono Trigger | [romhacking.net/utilities/1003](https://www.romhacking.net/utilities/1003/) |
 
 ## Identifying compressed data
 

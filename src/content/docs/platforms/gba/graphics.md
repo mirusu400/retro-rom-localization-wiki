@@ -176,6 +176,138 @@ damage numbers, item names, or dialogue over a Mode 7-style background.
 
 OBJ sprites can be various sizes (8x8 to 64x64), composed of multiple 8x8 tiles.
 
+## Sprite-based (OAM) text rendering
+
+Some GBA games render dialogue text using OBJ sprites instead of (or in addition to) background
+tiles. This is more complex than BG-based text but gives the engine capabilities that BG layers
+alone cannot provide.
+
+Source: [GBATEK — LCD OBJ / OAM Attributes](https://problemkaputt.de/gbatek.htm)
+
+### Why games use sprite text
+
+- **Layering over multiple BGs.** A sprite text box can float above all four BG layers without
+  consuming a BG layer for the dialogue window. This is valuable when Mode 0 already uses all
+  four BGs for the game scene (e.g., parallax scrolling, HUD, map).
+- **Per-character animation.** Each character can be an independent OBJ with its own position,
+  enabling effects like typewriter reveals, bounce-in, shake, or wave — common in RPG and
+  visual novel dialogue.
+- **Positioning freedom.** BG text is locked to the 8x8 tile grid (or requires per-scanline
+  scroll tricks). Sprites can be placed at arbitrary pixel coordinates, which is useful for
+  name labels that track a character on screen or for floating damage numbers.
+- **Semi-transparency.** OBJ attribute 0 bits 10-11 can set an OBJ to semi-transparent mode
+  (mode 1), blending the text with whatever is behind it — used for ghost text, fade effects,
+  and so on.
+
+### OAM entry format
+
+OAM (Object Attribute Memory) lives at `0x07000000`-`0x070003FF` and holds **128 entries**
+of 8 bytes each. Each entry has three 16-bit attributes (the fourth halfword is used for
+rotation/scaling parameters and is shared across entries).
+
+**Attribute 0** (`0x07000000 + n*8 + 0`):
+
+| Bits | Field | Values |
+|---|---|---|
+| 0-7 | Y coordinate | 0-255 (wraps at 256) |
+| 8 | Rotation/scaling flag | 0 = off, 1 = on |
+| 9 | Double-size (if rot/scale) / OBJ disable (if no rot/scale) | 0 = normal, 1 = double-size or hidden |
+| 10-11 | OBJ mode | 0 = normal, 1 = semi-transparent, 2 = OBJ window, 3 = prohibited |
+| 12 | Mosaic | 0 = off, 1 = on |
+| 13 | Color mode | 0 = 4bpp (16 colors), 1 = 8bpp (256 colors) |
+| 14-15 | Shape | 0 = square, 1 = horizontal, 2 = vertical, 3 = prohibited |
+
+**Attribute 1** (`0x07000000 + n*8 + 2`):
+
+| Bits | Field | Values |
+|---|---|---|
+| 0-8 | X coordinate | 0-511 (wraps at 512; values 240-511 appear off-screen left) |
+| 9-13 | Rotation/scaling parameter (if rot/scale on) | Selects one of 32 parameter sets |
+| 12 | Horizontal flip (if rot/scale off) | 0 = normal, 1 = mirrored |
+| 13 | Vertical flip (if rot/scale off) | 0 = normal, 1 = mirrored |
+| 14-15 | Size | 0-3 (combined with shape to determine pixel dimensions) |
+
+**Attribute 2** (`0x07000000 + n*8 + 4`):
+
+| Bits | Field | Values |
+|---|---|---|
+| 0-9 | Tile number | 0-1023 (index into OBJ VRAM) |
+| 10-11 | Priority relative to BG | 0 = highest, 3 = lowest |
+| 12-15 | Palette number | 0-15 (4bpp mode only; ignored in 8bpp) |
+
+**OBJ size table** (shape x size determines pixel dimensions):
+
+| Size | Square (0) | Horizontal (1) | Vertical (2) |
+|---|---|---|---|
+| 0 | 8x8 | 16x8 | 8x16 |
+| 1 | 16x16 | 32x8 | 8x32 |
+| 2 | 32x32 | 32x16 | 16x32 |
+| 3 | 64x64 | 64x32 | 32x64 |
+
+### OBJ tile addressing and the 1D/2D distinction
+
+The tile number in attribute 2 (bits 0-9) indexes into OBJ VRAM at `0x06010000`. How that index
+maps to memory depends on DISPCNT bit 6:
+
+- **1D mapping** (bit 6 = 1): tiles for a multi-tile sprite are stored sequentially.
+  A 16x16 4bpp sprite with tile number `T` uses tiles `T`, `T+1`, `T+2`, `T+3` (each 32 bytes
+  apart). Address = `0x06010000 + T * 32` (4bpp) or `0x06010000 + T * 64` (8bpp, but tile
+  number must be even).
+- **2D mapping** (bit 6 = 0): tiles are arranged in a virtual 32-tile-wide grid. A 16x16 sprite
+  uses tiles `T`, `T+1` (first row) and `T+32`, `T+33` (second row). This matters when you are
+  trying to find which tile data corresponds to which displayed character.
+
+Most GBA games use 1D mapping. Check DISPCNT to confirm.
+
+### Tile budget for OBJ text
+
+OBJ VRAM is 32 KB (`0x06010000`-`0x06017FFF`) in tiled modes 0-2, but only 16 KB
+(`0x06014000`-`0x06017FFF`) in bitmap modes 3-5.
+
+At 4bpp (32 bytes/tile): 32 KB holds **1024 tiles** (modes 0-2) or **512 tiles** (modes 3-5).
+
+This budget is shared with all other sprites (characters, UI icons, cursors). In practice, a
+text engine using OBJ rendering must carefully manage which glyph tiles are loaded into OBJ VRAM
+at any given time — typically maintaining a small cache of recently used tiles and evicting old
+ones. This is relevant for localization because a target script with more glyphs (e.g., Hangul or
+CJK) puts more pressure on the OBJ tile cache.
+
+### Identifying OAM-based text
+
+Signs that a game renders text through sprites rather than BG tiles:
+
+1. **mGBA's OBJ viewer** shows recognizable glyph tiles in OBJ VRAM (`0x06010000`+) while the
+   BG tile viewers show no font data.
+2. **The OAM viewer** shows many small sprites (8x8 or 8x16) arranged in a line where text
+   appears on screen. Each sprite's tile number points to a different glyph tile.
+3. **Setting a write breakpoint on OAM** (`0x07000000`) during text display — the game writes
+   OAM entries to position each character sprite.
+4. **Disabling OBJ display** (clear DISPCNT bit 12) causes dialogue text to vanish while
+   backgrounds remain.
+
+### Localization implications of OAM text
+
+**Separate tile space.** OBJ tiles at `0x06010000` are independent from BG tiles. If you expand
+the font for a new script, you must ensure the new glyph data is loaded into OBJ VRAM, not BG
+VRAM. The DMA or copy routine that loads font tiles must target the correct region.
+
+**128-sprite limit.** OAM holds only 128 entries total, shared with all game sprites. A dialogue
+line of 30 characters uses 30 entries (assuming 8x8 per character), which can be a significant
+fraction. Some engines mitigate this by pre-rendering text into larger tiles (e.g., one 32x8
+sprite per word) to reduce entry count — but this changes how you hook the text renderer.
+
+**Per-scanline OBJ limit.** The GBA can only render **128 OBJ pixels per scanline** (not 128
+sprites — 128 pixels of sprite width). A full line of 8x8 character sprites spanning the screen
+(240 pixels) exceeds this limit, causing sprites on the right to flicker or vanish. Games work
+around this by rendering text into wider composite sprites or by using BG layers for the text
+body and sprites only for effects. If your translation produces longer lines, watch for this
+limit.
+
+**Hooking the renderer.** To add VWF or change the encoding for OAM-based text, you must hook
+the routine that writes OAM entries (not the BG map-writing routine). The hook point is
+typically the function that iterates over the string, allocates an OAM slot per character, sets
+the tile number and X position, and copies glyph data to OBJ VRAM.
+
 ## Palettes
 
 - **BG palette**: `0x05000000`-`0x050001FF` (512 bytes, 256 colors).

@@ -289,6 +289,78 @@ BG palette data is written through:
 Each color is 15-bit RGB: `0bbb bbgg gggr rrrr` (little-endian, 2 bytes per color).
 Each palette has 4 colors = 8 bytes. All 8 palettes = 64 bytes total.
 
+## HDMA: VRAM DMA Transfer (GBC Only)
+
+On the original DMG, VRAM can only be written by the CPU during VBlank (~1.1 ms per
+frame) or while the LCD is off. The GBC introduces a **VRAM DMA** (commonly called
+HDMA) controller through registers `0xFF51`-`0xFF55` that can transfer data to VRAM
+far more efficiently. This is critical for VWF implementations that need to stream
+rendered tiles to VRAM every frame.
+
+Reference: [Pan Docs -- CGB Registers](https://gbdev.io/pandocs/CGB_Registers.html) (CC0)
+
+### Registers
+
+| Register | Address | Purpose |
+|----------|---------|---------|
+| HDMA1 | `0xFF51` | Source high byte |
+| HDMA2 | `0xFF52` | Source low byte (lower 4 bits ignored) |
+| HDMA3 | `0xFF53` | Destination high byte (only bits 12-4 within `0x8000`-`0x9FF0`) |
+| HDMA4 | `0xFF54` | Destination low byte (lower 4 bits ignored) |
+| HDMA5 | `0xFF55` | Length / mode / start trigger |
+
+Source must be in ROM, SRAM, or WRAM (`0x0000`-`0x7FF0` or `0xA000`-`0xDFF0`).
+Destination is always within VRAM (`0x8000`-`0x9FF0`). Transfers are always aligned
+to 16-byte boundaries.
+
+### Two DMA Modes
+
+**General-Purpose DMA** (HDMA5 bit 7 = 0): Transfers the entire block at once. The
+CPU halts until the transfer completes. Best used during VBlank or with the LCD off.
+
+**H-Blank DMA** (HDMA5 bit 7 = 1): Transfers **16 bytes ($10) per H-Blank** period
+(one transfer per scanline during mode 0, for scanlines LY=0 through LY=143). No
+transfer occurs during VBlank (LY=144-153); the transfer resumes at LY=0 on the
+next frame. The CPU continues executing between transfers.
+
+The transfer length is encoded in HDMA5 bits 6-0 as `(length / $10) - 1`. A value
+of `0x00` transfers one block ($10 bytes = 1 tile); `0x7F` transfers 128 blocks
+($800 bytes = 128 tiles).
+
+Reading HDMA5 returns the remaining block count minus 1 in bits 6-0, or `0xFF` when
+no transfer is active. Bit 7 reads as 0 while a transfer is active, 1 otherwise.
+
+### H-Blank DMA transfer budget per frame
+
+Each H-Blank transfer moves $10 bytes (exactly one 2bpp tile). With 144 visible
+scanlines per frame, H-Blank DMA can transfer up to **144 tiles per frame** if a
+transfer of sufficient length is configured. In practice, you typically need far
+fewer: a VWF renderer producing one to three tiles per character only needs a handful
+of transfers per text-advance frame.
+
+Each 16-byte block transfer takes approximately 8 microseconds of real time (8 M-cycles in
+normal speed, 16 "fast" M-cycles in double-speed mode), regardless of CPU speed.
+
+### Localization relevance
+
+H-Blank DMA is the preferred method for VWF tile streaming on GBC:
+
+- **No VBlank bottleneck:** Instead of cramming all tile writes into the ~1.1 ms
+  VBlank window, tiles trickle into VRAM across the frame via H-Blank transfers.
+- **CPU stays free:** Between H-Blank transfers, the CPU can continue executing
+  the VWF bit-shift compositing code, preparing the next tile while the previous
+  one is being transferred.
+- **Workflow:** The VWF renderer composes a tile in WRAM, sets HDMA1-4 to point
+  from the WRAM buffer to the target VRAM tile slot, and writes HDMA5 with bit 7
+  set and length = 0 (one block). The DMA completes at the next H-Blank.
+
+Important caveats:
+- Do not start an H-Blank DMA write to HDMA5 during an H-Blank period (STAT mode 0).
+- Do not switch the VRAM bank (`0xFF4F`) or the source ROM/SRAM bank while a
+  transfer is in progress.
+- H-Blank DMA is GBC-only. DMG-target patches must fall back to CPU-driven VBlank
+  writes.
+
 ## Font Storage Patterns in GB Games
 
 ### Pattern 1: Font in a contiguous ROM block

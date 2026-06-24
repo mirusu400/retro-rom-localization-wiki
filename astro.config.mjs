@@ -69,6 +69,7 @@ export default defineConfig({
 						'pointers',
 						'compression',
 						'tools',
+						'roundtrip-verification',
 					],
 				},
 				{

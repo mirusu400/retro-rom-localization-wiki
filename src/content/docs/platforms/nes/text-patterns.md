@@ -405,6 +405,105 @@ For CHR-RAM:
 4. Test on multiple emulators and, if possible, real hardware.
 ```
 
+## Compressed text and font data
+
+Unlike the GBA (which has BIOS SWI routines for LZ77, Huffman, and RLE), NES
+games have **no standard decompression API**. Every compression scheme is
+custom, implemented in game-specific 6502 assembly. This makes identification
+and reversal harder, but the limited NES hardware constrains what schemes are
+practical.
+
+### Why compression is used
+
+- **CHR-RAM games** must copy tile data from PRG-ROM into CHR-RAM at runtime.
+  Compressing those tiles frees PRG-ROM space for more graphics or text.
+- **Nametable data** (screen layouts) is frequently RLE-compressed because
+  backgrounds contain long horizontal runs of repeated tiles (e.g., blank sky,
+  floor, UI borders).
+- **Text-heavy games** sometimes compress the script itself using DTE/MTE
+  (covered above) or, less commonly, byte-level schemes like RLE or simple
+  LZ variants.
+- CHR-ROM games **cannot** use compressed tile data --- the PPU reads CHR-ROM
+  directly, so tiles must be stored in the native 2bpp format.
+
+### Common NES compression schemes
+
+| Scheme | Mechanism | Typical use | NES feasibility |
+|---|---|---|---|
+| **RLE** | Encode runs of identical bytes as (count, byte) | Nametable data, simple tile sets | Excellent --- trivial to decode, minimal RAM |
+| **PackBits / Konami RLE** | Flag-byte RLE: flag + run or flag + literal block | Tile data, nametable data | Good --- slightly more flexible than raw RLE |
+| **PB8 / PB53** | Bit-mask per 8- or 16-byte block selects repeat vs. literal | Tile data (CHR-RAM uploads) | Good --- operates on fixed-size blocks, easy to stream during V-blank |
+| **Simple LZSS** | Bit flags select literal bytes vs. back-references into a sliding window | Larger data blocks (title screens, cutscene graphics) | Marginal --- the NES has only 2 KB work RAM, severely limiting the sliding window |
+| **DTE / MTE** | Dictionary substitution (1 byte -> 2+ characters) | Text script | Excellent --- the dominant NES text compression |
+
+Full LZ77 (with a large sliding window) is **rare** on the NES because the 2 KB
+internal RAM cannot hold a useful history buffer without competing with the
+stack, zero-page variables, and other runtime state. Games that do use LZ-family
+compression typically limit the window to 256 bytes or less.
+
+### Identifying compressed data in a ROM
+
+**Entropy analysis.** Uncompressed text has recognizable byte patterns (runs of
+values in the character-table range, terminated by `$FF`/`$00`). Compressed
+regions look like high-entropy noise --- no obvious repeating structure when
+viewed in a hex editor.
+
+**Tile editor inspection.** Open the ROM in a tile viewer (YY-CHR, Tile
+Molester) in 2bpp NES mode. Uncompressed font tiles will be visually
+recognizable. Compressed tile data appears as garbage.
+
+**Decompressor tracing.** The most reliable method:
+
+1. Identify *where* the game copies tile data to CHR-RAM (or where it writes
+   decompressed nametable data). Set a **write breakpoint** on PPU register
+   `$2007` (PPUDATA) or on the CHR-RAM destination range.
+2. When the breakpoint hits, you are inside the decompression routine (or the
+   V-blank tile-upload loop). Trace backwards to find where it reads the
+   *source* data from PRG-ROM.
+3. Examine the decompressor logic:
+   - **RLE:** Look for a loop that reads a count byte, then a value byte, and
+     writes the value *count* times.
+   - **Flag-byte RLE (PackBits):** A flag byte is read first; its bits or
+     value determines whether the next chunk is a literal run or a repeated
+     run.
+   - **LZSS:** A bit-mask byte is read; each bit selects whether the next
+     datum is a literal byte or a (distance, length) back-reference pair.
+   - **PB8/PB53:** A control byte is read, then 8 data bytes; each control
+     bit says whether to use the corresponding data byte or repeat a
+     previous value.
+4. Once you understand the format, write a matching compressor so you can
+   reinsert modified data (new font tiles, expanded nametable layouts).
+
+### Compressed fonts in CHR-RAM games
+
+Many CHR-RAM games store font tiles in a compressed block and decompress them
+into pattern-table RAM during initialization or scene transitions. To modify
+the font:
+
+1. **Trace the decompressor** (as above) to locate the compressed font data
+   in PRG-ROM and understand the format.
+2. **Decompress** the original font data using a custom tool or script.
+3. **Edit** the decompressed tiles (add target-script glyphs, adjust width).
+4. **Recompress** using a compressor that produces output compatible with the
+   game's decompressor. If the recompressed data is larger than the original,
+   you may need to relocate it to free space or an expanded bank.
+5. **Update the pointer** (source address) that the decompression routine reads
+   from, if you moved the data.
+
+If writing a matching compressor is impractical, an alternative is to
+**patch out the decompression** entirely: replace the decompressor call with a
+simple block copy (LDA/STA loop) and store the font tiles uncompressed in ROM.
+This trades ROM space for simplicity and is viable when ROM expansion is
+already planned.
+
+### Compressed nametable / screen data
+
+Title screens, menu layouts, and dialog-box borders are often stored as
+compressed nametable data. If you need to edit these (e.g., to resize a text
+box or change a title screen), the same trace-and-recompress workflow applies.
+RLE is by far the most common format for nametable data because horizontal
+tile runs compress extremely well.
+
 ## Recommended tools for NES text work
 
 | Tool | Purpose |
@@ -426,4 +525,5 @@ See [Tools](/retro-rom-localization-wiki/tools/) for installation details.
 - [PPU pattern tables](https://www.nesdev.org/wiki/PPU_pattern_tables)
 - [PPU nametables](https://www.nesdev.org/wiki/PPU_nametables)
 - [CPU](https://www.nesdev.org/wiki/CPU)
+- [Tile compression](https://www.nesdev.org/wiki/Tile_compression) --- NESdev Wiki
 - [Mapper list](https://www.nesdev.org/wiki/Mapper)

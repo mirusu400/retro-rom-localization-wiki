@@ -38,6 +38,8 @@ files and directories, much like a disc image.
 |------|-------------|------|
 | **ndstool** | CLI tool to unpack an NDS ROM into its NitroFS folder structure and rebuild it. Part of devkitPro. | [github.com/devkitPro/ndstool](https://github.com/devkitPro/ndstool) |
 | **Tinke** | GUI NDS asset browser. Can view/replace individual files (graphics, fonts, text). Useful for exploration alongside ndstool. | [github.com/pleonex/tinke](https://github.com/pleonex/tinke) |
+| **CrystalTile2** | All-in-one NDS ROM editor combining hex editor, tile viewer/editor, ARM disassembler, NitroFS browser, NARC explorer, and compression tools. Supports non-standard tile sizes and multiple bit-depths. Originally Chinese; English translation by cory1492 and FAST6191. | [romhacking.net/utilities/818](https://www.romhacking.net/utilities/818/) |
+| **NitroExplorer2** | GUI NDS ROM filesystem browser and editor. Can extract and replace files regardless of size changes, with built-in LZ77 compression support. Handles cases where ndstool fails to rebuild. | [gbatemp.net/download/nitroexplorer.7301](https://gbatemp.net/download/nitroexplorer.7301/) |
 
 ### ndstool usage
 
@@ -64,6 +66,7 @@ Tools for converting between image formats (PNG) and the console's native tile f
 | **superfamiconv** | CLI tile/palette/map converter for SNES and GB. Handles 2bpp/4bpp/8bpp, palette reduction, and tile-map generation. | [github.com/Optiroc/SuperFamiconv](https://github.com/Optiroc/SuperFamiconv) |
 | **Tile Molester** | Java-based GUI tile editor. Opens any ROM and displays raw tile data at configurable bit-depths. Good for locating font tiles visually. | (use a current fork; original is unmaintained) |
 | **YY-CHR** | Windows GUI tile/character editor. Popular in the NES/SNES hacking community for font editing. | (community builds available on RHDN) |
+| **NFTREdit** | NDS NFTR (Nitro FonT Resource) font editor. Preview text in-font, view/edit character maps, import/export tile bitmaps, change tile dimensions. By DarthNemesis; requires .NET. | [gbatemp.net/download/nftredit.29196](https://gbatemp.net/download/nftredit.29196/) |
 
 ### rgbgfx usage
 
@@ -94,6 +97,7 @@ These tools use `.tbl` files to decode and re-encode game text. See
 |------|-------------|------|
 | **Cartographer** | CLI text dumper. Reads a ROM with a `.tbl` and pointer-table definition, and dumps all strings to a script file. | [romhacking.net/utilities/647](https://www.romhacking.net/utilities/647/) |
 | **Atlas** | CLI text inserter. Reads a translated script, writes strings to the ROM, and recomputes pointers automatically. The counterpart to Cartographer. | [romhacking.net/utilities/224](https://www.romhacking.net/utilities/224/) |
+| **Kuriimu2** | General-purpose game translation toolkit with a plugin architecture supporting archives, text, images, and fonts across many formats (MSBT, GMD, SARC, etc.). Covers NDS, 3DS, and more. CLI and GUI modes. | [github.com/FanTranslatorsInternational/Kuriimu2](https://github.com/FanTranslatorsInternational/Kuriimu2) |
 | **Custom Python** | For complex or unusual text engines, a custom extraction/insertion script is often the best option. You have full control over multi-byte encodings, pointer formats, and compression. | — |
 
 ### Atlas script example
@@ -225,10 +229,11 @@ Quick reference for which tools apply to each target platform.
 | Task | NES | SNES | GB/GBC | GBA | NDS |
 |------|-----|------|--------|-----|-----|
 | Assembler | cc65, 64tass | asar, 64tass | RGBDS | devkitARM | devkitARM |
-| Tile conversion | YY-CHR | superfamiconv, YY-CHR | rgbgfx | superfamiconv | Tinke |
-| Text dump/insert | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas, custom |
+| Tile conversion | YY-CHR | superfamiconv, YY-CHR | rgbgfx | superfamiconv | Tinke, CrystalTile2 |
+| Font editing | YY-CHR | YY-CHR | — | — | NFTREdit, Kuriimu2 |
+| Text dump/insert | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas, Kuriimu2, custom |
 | Compression | (custom) | (custom) | (custom) | gbalzss | DSDecmp, gbalzss |
-| ROM unpack | — | — | — | — | ndstool |
+| ROM unpack | — | — | — | — | ndstool, NitroExplorer2, CrystalTile2 |
 | Debugger emu | FCEUX, Mesen2 | bsnes-plus, Mesen2 | mGBA, SameBoy, Mesen2 | mGBA, Mesen2 | DeSmuME, melonDS |
 | Patching | Flips | Flips | Flips | Flips | xdelta3, Flips |
 | RE / disasm | Ghidra, radare2 | Ghidra, radare2 | Ghidra (GhidraBoy), radare2 | Ghidra, radare2 | Ghidra, radare2 |

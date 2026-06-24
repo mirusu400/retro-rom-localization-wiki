@@ -391,6 +391,217 @@ In the disassembly, look for:
 | **mGBA** (debugger + Lua) | Runtime breakpoints, memory inspection, scripted searches |
 | **xxd / ImHex** | Hex-level inspection, relative search, pattern hunting |
 
+## Hooking with BL: patching branch-and-link instructions
+
+The most common way to inject custom code into a GBA game is to **overwrite an existing `BL`
+(branch-and-link) instruction** so it calls your routine instead of (or in addition to) the
+original. This is how translators add VWF rendering, encoding conversion, or expanded font
+loading without rewriting the entire text engine.
+
+Source: [GBATEK — ARM/Thumb Opcode Summary](https://problemkaputt.de/gbatek.htm),
+ARM7TDMI Technical Reference Manual.
+
+### Thumb BL encoding
+
+Since most GBA game code is Thumb, this is the encoding you will work with most often. Thumb
+`BL` is unique: it is a **two-halfword instruction** (4 bytes total), where each halfword is
+executed sequentially by the CPU.
+
+```
+First halfword  (H=0):  1111 0 [offset_hi:11]
+Second halfword (H=1):  1111 1 [offset_lo:11]
+
+  Bits 15-11 of first  halfword: 11110  (0xF000 mask)
+  Bits 15-11 of second halfword: 11111  (0xF800 mask)
+  Bits 10-0:  offset fragments
+```
+
+**How the CPU executes it:**
+
+1. First halfword: `LR = PC + (offset_hi << 12)`. The CPU loads the upper part of the target
+   offset into the link register. `offset_hi` is sign-extended (bit 10 is the sign bit).
+2. Second halfword: `temp = LR + (offset_lo << 1); LR = (PC - 2) | 1; PC = temp`. The CPU
+   computes the final target, saves the return address in LR (with bit 0 set for Thumb), and
+   branches.
+
+**Combined offset:** the two 11-bit fields form a 22-bit signed offset (in halfwords), giving
+a range of **+/- 4 MB** from the `BL` instruction address. The target address is:
+
+```
+target = address_of_first_halfword + 4 + sign_extend(offset_hi << 12) + (offset_lo << 1)
+```
+
+(The `+ 4` accounts for the ARM pipeline: PC is 4 bytes ahead of the current instruction in
+Thumb mode.)
+
+### Computing a Thumb BL patch
+
+Given the address of the `BL` instruction and the desired target:
+
+```python
+def encode_thumb_bl(bl_addr, target_addr):
+    """Encode a Thumb BL instruction (two halfwords) for a given source and target."""
+    offset = target_addr - (bl_addr + 4)  # account for pipeline
+    assert -0x400000 <= offset < 0x400000, "target out of BL range (+/- 4 MB)"
+
+    offset_hw = offset >> 1               # convert byte offset to halfword offset
+    hi = (offset_hw >> 11) & 0x7FF        # upper 11 bits
+    lo = offset_hw & 0x7FF                # lower 11 bits
+
+    first  = 0xF000 | hi
+    second = 0xF800 | lo
+    return first, second
+
+# Example: patch BL at ROM offset 0x1234 to call routine at ROM offset 0x80000
+bl_addr     = 0x08001234              # ROM address of the BL instruction
+target_addr = 0x08080001              # target (bit 0 set = Thumb; ignored in BL calc)
+target_addr &= ~1                     # strip Thumb bit for offset calculation
+
+first, second = encode_thumb_bl(bl_addr, target_addr)
+# Write little-endian: rom[0x1234] = first & 0xFF, rom[0x1235] = first >> 8,
+#                      rom[0x1236] = second & 0xFF, rom[0x1237] = second >> 8
+```
+
+### ARM BL encoding
+
+ARM `BL` is a single 32-bit instruction used when the code is in ARM state (less common for
+general game code but used in BIOS, IWRAM routines, and some SDK stubs):
+
+```
+Bits 31-28: condition (0xE = always)
+Bits 27-25: 101
+Bit 24:     1 (L flag: 1 = BL, 0 = B)
+Bits 23-0:  24-bit signed offset (in words)
+
+Encoding:  0xEB000000 | (offset_words & 0x00FFFFFF)
+```
+
+**Target address:**
+
+```
+target = address_of_BL + 8 + (sign_extend_24(offset) << 2)
+```
+
+The `+ 8` is the ARM pipeline offset (PC is 8 bytes ahead). The 24-bit signed word offset gives
+a range of **+/- 32 MB**.
+
+```python
+def encode_arm_bl(bl_addr, target_addr):
+    """Encode an ARM BL instruction (unconditional)."""
+    offset = target_addr - (bl_addr + 8)
+    assert offset % 4 == 0, "target must be word-aligned for ARM BL"
+    offset_words = offset >> 2
+    assert -0x800000 <= offset_words < 0x800000, "target out of ARM BL range (+/- 32 MB)"
+    return 0xEB000000 | (offset_words & 0x00FFFFFF)
+```
+
+### Practical example: hooking the text render function
+
+**Scenario:** A game has a Thumb text-rendering function at `0x08004A00` that processes one
+character at a time. It calls a glyph-drawing subroutine via `BL draw_glyph` at address
+`0x08004A2C`. You want to intercept every glyph draw to implement VWF or convert a multi-byte
+encoding to tile indices.
+
+**Step 1: Find free space.** GBA ROMs often have unused `0xFF`-filled regions near the end. If
+the ROM is 8 MB but the game only uses 4 MB, addresses from `0x08400000` onward are available.
+Alternatively, many ROMs have small pockets of `0x00` or `0xFF` padding between data sections.
+
+**Step 2: Write your hook routine.** The hook must preserve the calling convention — the original
+`BL` put the character code in a register (commonly `r0`) and expected the glyph-draw function
+to return cleanly. Your hook can modify `r0` (encoding conversion), perform extra work (VWF
+pixel merging), and then call the original function:
+
+```
+; Custom hook at 0x08400000 (Thumb)
+; r0 = character code from the text engine
+
+hook_draw_glyph:
+    PUSH  {r1-r3, lr}        ; save registers
+
+    ; --- your custom logic here ---
+    ; Example: convert from custom 2-byte encoding to tile index
+    CMP   r0, #0x80
+    BLT   .single_byte
+    ; handle multi-byte: read next byte, compute tile index
+    ; ...
+.single_byte:
+
+    ; Call the original draw_glyph function
+    BL    original_draw_glyph ; 0x08002E00 (the real glyph drawer)
+
+    ; --- post-draw logic (e.g., advance VWF cursor) ---
+
+    POP   {r1-r3, pc}        ; return to text engine
+```
+
+**Step 3: Patch the BL.** Overwrite the original `BL draw_glyph` at `0x08004A2C` with a
+`BL hook_draw_glyph` pointing to `0x08400000`:
+
+```python
+# Original BL at 0x08004A2C called 0x08002E00
+# New BL at 0x08004A2C should call 0x08400000
+
+first, second = encode_thumb_bl(0x08004A2C, 0x08400000)
+rom[0x4A2C] = first & 0xFF
+rom[0x4A2D] = first >> 8
+rom[0x4A2E] = second & 0xFF
+rom[0x4A2F] = second >> 8
+```
+
+**Step 4: Verify round-trip.** Load the patched ROM in mGBA, trigger text display, and confirm
+that:
+1. The hook is reached (breakpoint at `0x08400000`).
+2. The original glyph-draw function is still called correctly.
+3. Text displays identically to the unpatched ROM (before adding your custom logic).
+
+Only after this round-trip verification should you begin adding VWF or encoding changes.
+
+### Common pitfalls
+
+**Range limit.** Thumb `BL` can only reach +/- 4 MB. If your hook is in expanded ROM space far
+from the call site, the `BL` may not reach. Solutions:
+- Place the hook in a closer free-space region.
+- Use a **trampoline**: patch the `BL` to a short stub in nearby free space, and the stub uses
+  `LDR pc, [pc, #offset]` (or `BX rN` with the full 32-bit address loaded via `LDR`) to reach
+  the distant hook. This costs 8-12 bytes of nearby space.
+
+```
+; Trampoline stub (Thumb, 8 bytes) — place in nearby free space
+trampoline:
+    LDR   r3, =hook_draw_glyph + 1   ; +1 for Thumb flag
+    BX    r3                          ; long branch to hook
+    .word hook_draw_glyph + 1         ; literal pool (the LDR reads this)
+```
+
+**ARM/Thumb interworking.** If the code around the `BL` is ARM but your hook is Thumb (or vice
+versa), a plain `BL` will not switch state. Use `BLX` (available on ARMv5+; the GBA is ARMv4T
+and does **not** have `BLX` as an instruction). On GBA, interwork manually:
+
+```
+; ARM code calling a Thumb hook:
+    LDR   r12, =hook_addr + 1    ; load Thumb address (bit 0 set)
+    MOV   lr, pc                  ; save return address manually
+    BX    r12                     ; branch-and-exchange to Thumb
+```
+
+**Clobbered registers.** Your hook must save and restore any registers the caller expects to
+survive. Check the original function's calling convention — `r0`-`r3` are caller-saved (scratch),
+but `r4`-`r7` (Thumb) or `r4`-`r11` (ARM) are callee-saved. Always `PUSH {lr}` if you use `BL`
+inside your hook (since `BL` overwrites LR).
+
+**Alignment.** Thumb code must be halfword-aligned (even address). ARM code must be word-aligned
+(4-byte boundary). If your free space starts at an odd address, pad with a `NOP` (`0x46C0` in
+Thumb).
+
+### Tools for BL patching
+
+| Tool | Use |
+|---|---|
+| **Ghidra** (ARM/Thumb) | Disassemble to find the `BL` call site and original target; verify your offset calculation |
+| **mGBA debugger** | Set breakpoints on the patched `BL` to confirm the hook is reached |
+| **armips** | ARM/Thumb assembler that can patch ROMs directly; handles BL offset calculation for you |
+| **Python + struct** | Manual BL encoding as shown above; good for build scripts |
+
 ## References
 
 - [GBATEK (main)](https://problemkaputt.de/gbatek.htm)

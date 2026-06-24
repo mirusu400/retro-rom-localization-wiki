@@ -1,6 +1,6 @@
 ---
 title: "NES Mappers & Banking"
-description: "NES mapper chips and bank switching explained for localization: how NROM, MMC1, UxROM, CNROM, MMC3, and MMC5 affect text, fonts, and pointer tables."
+description: "NES mapper chips and bank switching explained for localization: NROM, MMC1, UxROM, CNROM, MMC3, MMC5, AxROM, MMC2, MMC4, VRC6, and VRC7 --- how they affect text, fonts, and pointer tables."
 sidebar:
   order: 3
 ---
@@ -213,6 +213,189 @@ for background and sprite rendering.
   mapper's complexity means more registers to understand.
 - 8x16 sprite mode with separate CHR banking is useful if the game uses sprites for text.
 
+### Mapper 9 --- MMC2 (PxROM)
+
+| Property | Value |
+|---|---|
+| PRG-ROM | Up to 128 KB (8 KB switchable at `$8000`--`$9FFF`; last three 8 KB banks fixed at `$A000`--`$FFFF`) |
+| CHR | Up to 128 KB; two 4 KB banks per PPU half, auto-switched via latch |
+| PRG-RAM | None (8 KB on PlayChoice-10 version only) |
+| Example games | *Mike Tyson's Punch-Out!!* |
+
+MMC2's defining feature is its **CHR latch mechanism**. Each 4 KB PPU half
+(`$0000`--`$0FFF` and `$1000`--`$1FFF`) has *two* CHR bank registers that are
+switched automatically during rendering based on specific tile fetches.
+
+**Registers:**
+
+| Address range | Register | Function |
+|---|---|---|
+| `$A000`--`$AFFF` | PRG Bank | Bits 0--3: select 8 KB PRG bank at `$8000`--`$9FFF` |
+| `$B000`--`$BFFF` | CHR Bank 0 FD | Bits 0--4: 4 KB CHR bank for `$0000`--`$0FFF` when latch 0 = `$FD` |
+| `$C000`--`$CFFF` | CHR Bank 0 FE | Bits 0--4: 4 KB CHR bank for `$0000`--`$0FFF` when latch 0 = `$FE` |
+| `$D000`--`$DFFF` | CHR Bank 1 FD | Bits 0--4: 4 KB CHR bank for `$1000`--`$1FFF` when latch 1 = `$FD` |
+| `$E000`--`$EFFF` | CHR Bank 1 FE | Bits 0--4: 4 KB CHR bank for `$1000`--`$1FFF` when latch 1 = `$FE` |
+| `$F000`--`$FFFF` | Mirroring | Bit 0: 0 = vertical, 1 = horizontal |
+
+**CHR latch triggers:**
+
+| PPU address read | Effect |
+|---|---|
+| `$0FD8` | Latch 0 set to `$FD` |
+| `$0FE8` | Latch 0 set to `$FE` |
+| `$1FD8`--`$1FDF` | Latch 1 set to `$FD` |
+| `$1FE8`--`$1FEF` | Latch 1 set to `$FE` |
+
+The latch updates *after* the tile at the trigger address is fetched, so the
+trigger tile itself is drawn from the *old* bank. On reset, both latches
+default to `$FE`.
+
+**Localization notes:**
+- Only one commercial game (Punch-Out!!) uses this mapper, but understanding
+  the latch is essential if you need to modify its CHR layout.
+- The latch doubles the effective CHR address space --- up to 512 visible
+  background tiles instead of 256 --- by placing a trigger tile on-screen that
+  switches from one 4 KB bank to another mid-scanline.
+- PRG is mostly fixed: only 8 KB at `$8000`--`$9FFF` is switchable, with the
+  remaining 24 KB pinned to the last three banks. Text and engine code almost
+  certainly reside in the fixed region.
+- 8x16 sprites can cause unexpected latch 1 switches because unused sprite
+  slots fetch tile `$FF`, hitting the `$1FEx` range.
+
+### Mapper 10 --- MMC4 (FxROM)
+
+| Property | Value |
+|---|---|
+| PRG-ROM | Up to 256 KB (16 KB switchable at `$8000`--`$BFFF`; last 16 KB fixed at `$C000`--`$FFFF`) |
+| CHR | Up to 128 KB; same dual-latch mechanism as MMC2 |
+| PRG-RAM | 8 KB at `$6000`--`$7FFF` (battery-backed) |
+| Example games | *Fire Emblem: Ankoku Ryuu to Hikari no Tsurugi* (Famicom), *Fire Emblem Gaiden* |
+
+MMC4 is closely related to MMC2 but switches **16 KB PRG banks** (like MMC1
+mode 3) instead of 8 KB, and provides PRG-RAM.
+
+**Registers:**
+
+| Address range | Register | Function |
+|---|---|---|
+| `$A000`--`$AFFF` | PRG Bank | Bits 0--3: select 16 KB PRG bank at `$8000`--`$BFFF` |
+| `$B000`--`$BFFF` | CHR Bank 0 FD | Bits 0--4: 4 KB CHR bank for `$0000`--`$0FFF` when latch 0 = `$FD` |
+| `$C000`--`$CFFF` | CHR Bank 0 FE | Bits 0--4: 4 KB CHR bank for `$0000`--`$0FFF` when latch 0 = `$FE` |
+| `$D000`--`$DFFF` | CHR Bank 1 FD | Bits 0--4: 4 KB CHR bank for `$1000`--`$1FFF` when latch 1 = `$FD` |
+| `$E000`--`$EFFF` | CHR Bank 1 FE | Bits 0--4: 4 KB CHR bank for `$1000`--`$1FFF` when latch 1 = `$FE` |
+| `$F000`--`$FFFF` | Mirroring | Bit 0: 0 = vertical, 1 = horizontal |
+
+**CHR latch triggers** (differs from MMC2 --- latch 0 also responds to a range):
+
+| PPU address read | Effect |
+|---|---|
+| `$0FD8`--`$0FDF` | Latch 0 set to `$FD` |
+| `$0FE8`--`$0FEF` | Latch 0 set to `$FE` |
+| `$1FD8`--`$1FDF` | Latch 1 set to `$FD` |
+| `$1FE8`--`$1FEF` | Latch 1 set to `$FE` |
+
+**Localization notes:**
+- Fire Emblem (Famicom) is the primary target for this mapper. It is a
+  text-heavy strategy RPG, making it a common fan-translation project.
+- 16 KB PRG banking provides a larger switchable window than MMC2. Text data
+  likely lives in switchable banks, with the engine in the fixed last bank
+  at `$C000`--`$FFFF`.
+- 8 KB battery-backed PRG-RAM at `$6000`--`$7FFF` is used for save data, but
+  any unused portion could store expanded translation data at runtime.
+- The CHR latch works the same way as MMC2, doubling the effective tile count.
+  This is helpful for localizations that need more font tiles.
+
+### Mapper 24/26 --- VRC6 (Konami)
+
+| Property | Value |
+|---|---|
+| PRG-ROM | Up to 256 KB (16 KB + 8 KB switchable banks; last 8 KB fixed) |
+| CHR | Up to 256 KB (1 KB switchable banks, multiple modes) |
+| PRG-RAM | 8 KB at `$6000`--`$7FFF` (battery-backed on mapper 26 boards) |
+| Extra features | 3 extra audio channels (2 pulse + 1 sawtooth), scanline IRQ |
+| Example games | *Akumajou Densetsu* (Castlevania III JP), *Madara*, *Esper Dream 2* |
+
+Konami's VRC6 comes in two board variants that swap address lines A0 and A1:
+
+| Variant | iNES mapper | Address line order | Notable game |
+|---|---|---|---|
+| VRC6a | 24 | A0, A1 (standard) | *Akumajou Densetsu* |
+| VRC6b | 26 | A1, A0 (swapped) | *Madara*, *Esper Dream 2* |
+
+To convert register addresses between variants: swap bits 0 and 1
+(e.g., VRC6a `$x001` = VRC6b `$x002`).
+
+**PRG banking (VRC6a addresses):**
+
+| Address | Function |
+|---|---|
+| `$8000`--`$8003` | Select 16 KB PRG bank at `$8000`--`$BFFF` (value * 2 selects the 8 KB pair) |
+| `$C000`--`$C003` | Select 8 KB PRG bank at `$C000`--`$DFFF` |
+| (fixed) | Last 8 KB always at `$E000`--`$FFFF` |
+
+**CHR banking** is configured through registers at `$D000`--`$E003` (8 registers,
+R0--R7), with the mode set by bits in `$B003`. The default mode maps eight
+1 KB CHR banks across `$0000`--`$1FFF`.
+
+**Localization notes:**
+- *Akumajou Densetsu* is the Japanese version of *Castlevania III*; the US
+  release (*Dracula's Curse*) was converted to MMC5, losing the VRC6 audio.
+  Localizing the JP ROM preserves the superior soundtrack.
+- Fine-grained 1 KB CHR banking provides excellent font flexibility --- you can
+  map different 1 KB font pages into the pattern table as needed.
+- The 3 extra audio channels are Famicom-only (they use the cartridge audio
+  expansion pins, which the NES lacks). Translations targeting NES hardware
+  will not hear the extra audio without a hardware adapter.
+- PRG-RAM (mapper 26 boards) is battery-backed and can supplement save data or
+  hold translation buffers.
+- The scanline IRQ (shared with VRC4/VRC7) uses a CPU-cycle-driven prescaler
+  that divides by ~113.67 to approximate scanline timing.
+
+### Mapper 85 --- VRC7 (Konami)
+
+| Property | Value |
+|---|---|
+| PRG-ROM | Up to 512 KB (three 8 KB switchable banks; last 8 KB fixed) |
+| CHR | Up to 256 KB (eight 1 KB switchable banks) |
+| PRG-RAM | 8 KB at `$6000`--`$7FFF` (battery-backed) |
+| Extra features | 6-channel FM synthesis audio (OPLL derivative), scanline IRQ |
+| Example games | *Lagrange Point*, *Tiny Toon Adventures 2* (JP) |
+
+VRC7 has two submapper variants differing in which address line selects the
+register half:
+
+| Variant | Submapper | Select line | Notable game |
+|---|---|---|---|
+| VRC7a | 2 | A4 (`$x010`) | *Lagrange Point* |
+| VRC7b | 1 | A3 (`$x008`) | *Tiny Toon Adventures 2* |
+
+**PRG banking:**
+
+| Address (VRC7a) | Function |
+|---|---|
+| `$8000` | Select 8 KB PRG bank at `$8000`--`$9FFF` (6-bit register) |
+| `$8010` | Select 8 KB PRG bank at `$A000`--`$BFFF` |
+| `$9000` | Select 8 KB PRG bank at `$C000`--`$DFFF` |
+| (fixed) | Last 8 KB always at `$E000`--`$FFFF` |
+
+**CHR banking:** Eight 1 KB bank registers at `$A000`, `$A010`, `$B000`,
+`$B010`, `$C000`, `$C010`, `$D000`, `$D010` map CHR across
+`$0000`--`$1FFF`. *Lagrange Point* uses CHR-RAM with banking rather than
+CHR-ROM.
+
+**Localization notes:**
+- *Lagrange Point* is the only game that uses VRC7's FM audio --- a sci-fi RPG
+  with a substantial script, making it a high-value translation target.
+- The 6-bit PRG bank register limits addressable PRG-ROM to 512 KB (64 banks
+  of 8 KB). This cannot be expanded further on real VRC7 hardware.
+- CHR-RAM with 1 KB banking (as in Lagrange Point) means you can dynamically
+  load font tiles into any 1 KB CHR slot --- ideal for scripts that need many
+  glyphs.
+- The FM audio registers (`$9010`/`$9030`) require a minimum 42-cycle delay
+  between writes. If your ASM patches add code near the audio driver, be
+  careful not to violate this timing.
+- The scanline IRQ is identical to VRC4/VRC6.
+
 ### Mapper 7 --- AxROM
 
 | Property | Value |
@@ -242,6 +425,10 @@ AxROM switches the entire 32 KB PRG space at once and uses single-screen mirrori
 | 4 | MMC3 | 8K switchable | 2K+1K switchable | 8K | ~300+ |
 | 5 | MMC5 | 8/16/32K modes | 1/2/4/8K modes | Up to 64K | ~10 |
 | 7 | AxROM | 32K switchable | 8K RAM | No | ~60 |
+| 9 | MMC2 | 8K switch + 24K fixed | 4K dual-latch ROM | No | 1 |
+| 10 | MMC4 | 16K switch + 16K fixed | 4K dual-latch ROM | 8K | ~4 |
+| 24/26 | VRC6 | 16K+8K switch + 8K fixed | 1K switchable | 8K (m26) | ~3 |
+| 85 | VRC7 | 3x 8K switch + 8K fixed | 1K switchable | 8K | ~2 |
 
 *Game counts are approximate, based on NesCartDB data.*
 
@@ -335,3 +522,7 @@ When expanding:
 - [UxROM](https://www.nesdev.org/wiki/UxROM) --- NESdev Wiki
 - [MMC3](https://www.nesdev.org/wiki/MMC3) --- NESdev Wiki
 - [MMC5](https://www.nesdev.org/wiki/MMC5) --- NESdev Wiki
+- [MMC2](https://www.nesdev.org/wiki/MMC2) --- NESdev Wiki
+- [MMC4](https://www.nesdev.org/wiki/MMC4) --- NESdev Wiki
+- [VRC6](https://www.nesdev.org/wiki/VRC6) --- NESdev Wiki
+- [VRC7](https://www.nesdev.org/wiki/VRC7) --- NESdev Wiki

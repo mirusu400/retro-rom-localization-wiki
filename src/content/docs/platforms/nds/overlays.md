@@ -281,6 +281,144 @@ renderer), you may need to patch ARM code within an overlay:
 - If no free space exists, increase the overlay size (but ensure it does not
   collide with another overlay's RAM range).
 
+## Overlay Dependencies and Cross-References
+
+NDS overlays have no dynamic linker and no symbol tables at runtime. Unlike
+shared libraries on a PC, an overlay cannot import a function from another
+overlay by name. All cross-overlay references are resolved **at compile time
+as fixed addresses** or **at runtime through function pointer tables** that
+the developer sets up manually. Understanding these patterns is important
+for localization because text engines, font renderers, and script
+interpreters are often split across multiple overlays or shared with the
+ARM9 binary.
+
+### Mutual exclusion (overlapping RAM ranges)
+
+Two overlays that load to the same (or overlapping) RAM address range are
+**mutually exclusive** -- the game never loads both at once. This is the NDS
+equivalent of overlay "groups" in classic mainframe terminology.
+
+To identify mutual-exclusion groups, dump the overlay table and sort by RAM
+address:
+
+```python
+# After reading all overlay table entries (see code above):
+overlays_by_addr = sorted(overlays, key=lambda o: o['ram_addr'])
+for ov in overlays_by_addr:
+    end = ov['ram_addr'] + ov['ram_size'] + ov['bss_size']
+    print(f"OV{ov['id']:3d}  0x{ov['ram_addr']:08X}--0x{end:08X}")
+```
+
+If overlay 5 occupies `0x021A0000`--`0x021C0000` and overlay 12 occupies
+`0x021A0000`--`0x021B8000`, they share the same base address and can never
+coexist in RAM. The game loads one **or** the other depending on the current
+scene (e.g., overworld vs. battle).
+
+**Why this matters for localization:**
+
+- If you expand an overlay (e.g., adding text or a VWF renderer), you must
+  ensure the new size does not collide with any overlay that **can** be
+  loaded simultaneously. Overlays in the same mutual-exclusion group do not
+  matter -- they are never in RAM together.
+- If you need to move strings or code between overlays, both overlays must
+  be in the same group (so the addresses are valid) or you must use the
+  ARM9 binary as an intermediary.
+
+### How overlays call into the ARM9 binary
+
+The ARM9 binary is always present in RAM. Overlays commonly call ARM9
+functions directly via hardcoded addresses -- the compiler resolves these at
+link time. In a disassembler you will see `BL 0x020XXXXX` instructions that
+branch into the ARM9 address range. These calls are safe because the ARM9
+binary never moves.
+
+When localizing, if you hook or patch an ARM9 function (e.g., the main text
+rendering call), every overlay that calls it will automatically use your
+patched version. This makes the ARM9 binary a good place to install global
+hooks such as a variable-width font renderer.
+
+### How overlays reference each other
+
+Because overlays can be swapped in and out, direct cross-overlay function
+calls are fragile -- if overlay A calls an address in overlay B, but B is
+not loaded, the game will crash or read garbage. Games handle this in
+several ways:
+
+**Pattern 1: Indirect calls through the ARM9 binary.** The ARM9 binary
+contains a function pointer table or dispatch function. Overlays call the
+ARM9 dispatcher, which checks whether the target overlay is loaded (loading
+it if necessary) and then branches to the target function. This is the
+safest and most common pattern in NitroSDK games.
+
+```
+Overlay 3 (battle)               ARM9 binary
+  BL 0x020ABCDE  ──────────>   dispatch_text_render:
+                                   load overlay 7 if needed
+                                   BLX [overlay_7_render_ptr]
+                                            │
+                                            v
+                                Overlay 7 (text engine)
+                                   render_text_line:
+                                   ...
+```
+
+**Pattern 2: Shared-address overlays with compatible entry points.** Some
+games place overlays that serve the same role (e.g., different level
+scripts) at the same RAM address with a known entry point at a fixed offset
+from the overlay base. The ARM9 binary calls the entry point; whichever
+overlay is currently loaded handles the call.
+
+**Pattern 3: Runtime function pointer registration.** An overlay, on load,
+writes its function pointers into a table in the ARM9 binary or in a
+dedicated RAM region. Other code uses these pointers to call the overlay's
+functions. When the overlay is unloaded, the pointers become invalid. This
+pattern is common in games with plugin-style subsystems.
+
+### Static initializers and overlay load/unload
+
+Each overlay table entry has Static Init Start (`0x10`) and Static Init End
+(`0x14`) fields. These bracket an array of function pointers in the
+overlay's RAM space. When `FS_LoadOverlay` loads an overlay, the NitroSDK
+iterates this array and calls each pointer -- these are C++ static
+constructors (`sinit` functions) that initialize global objects.
+
+There is no corresponding destructor table in the overlay table format.
+Games that need cleanup on unload typically register a teardown function
+manually (e.g., via a callback list in the ARM9 binary).
+
+**Localization relevance:** If you add new global/static C++ objects to an
+overlay (rare, but possible when injecting a complex text engine), you must
+update the Static Init Start/End range to include your new constructor
+pointer. If you only patch existing code or add plain C functions, the
+static initializer fields can be left unchanged.
+
+### Identifying cross-references in practice
+
+When reverse-engineering a game's overlay structure for localization:
+
+1. **Dump all overlays** and load them into Ghidra or IDA at their correct
+   RAM addresses. Use the ARM9 binary as the base program, then add each
+   overlay as a memory block at its specified address.
+
+2. **Search for BL/BLX instructions** that target addresses outside the
+   current overlay's range. These are cross-references -- note whether they
+   point into the ARM9 binary or into another overlay's address range.
+
+3. **Build an overlay dependency map.** For each overlay, list which ARM9
+   functions it calls and which other overlay addresses it references. This
+   map tells you which overlays share text-engine code and which ones you
+   need to patch together.
+
+4. **Trace FS_LoadOverlay calls** in the ARM9 binary. Each call site tells
+   you which overlay is loaded during which game state. Set breakpoints on
+   `FS_LoadOverlay` and `FS_UnloadOverlay` in DeSmuME or melonDS to build
+   a runtime load sequence for each game scene.
+
+5. **Watch for function pointer tables** in the ARM9 binary's data section.
+   These are often arrays of 4-byte ARM addresses that change depending on
+   which overlay is loaded. Strings like scene names or overlay ID
+   constants nearby can help identify what each slot does.
+
 ## Practical Tips
 
 1. **Map all overlays first.** Before starting localization, create a table of
@@ -309,6 +447,12 @@ renderer), you may need to patch ARM code within an overlay:
   [https://problemkaputt.de/gbatek-ds-cartridge-header.htm](https://problemkaputt.de/gbatek-ds-cartridge-header.htm)
 - GBATEK -- main reference for NDS hardware and data structures:
   [https://problemkaputt.de/gbatek.htm](https://problemkaputt.de/gbatek.htm)
+- "Reverse Engineering a DS Game" (Starcube Labs) -- overlay loading and memory layout:
+  [https://www.starcubelabs.com/reverse-engineering-ds/](https://www.starcubelabs.com/reverse-engineering-ds/)
+- NitroPacker (overlay patching utility):
+  [https://github.com/haroohie-club/NitroPacker](https://github.com/haroohie-club/NitroPacker)
+- NTRGhidra (Ghidra loader for NDS binaries and overlays):
+  [https://github.com/pedro-javierf/NTRGhidra](https://github.com/pedro-javierf/NTRGhidra)
 - ndstool source (overlay handling):
   [https://github.com/devkitPro/ndstool](https://github.com/devkitPro/ndstool)
 - DSDecmp (BLZ and other NDS compression):

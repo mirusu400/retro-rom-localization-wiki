@@ -360,6 +360,31 @@ Look for these 65816 patterns:
 - **Byte masking**: `AND #$07` (to get sub-tile pixel offset from total X position)
 - **DMA setup writes**: stores to $4300-$430A followed by a write to $420B
 
+## Super FX (GSU) and ROM access
+
+Games using the **Super FX** (Graphics Support Unit) coprocessor present a unique constraint:
+while the GSU is executing, **the SNES CPU cannot access ROM**. The two processors share a
+single ROM bus with no arbitration -- the GSU locks the bus entirely during its run. The GSU
+has a small **512-byte instruction cache** to reduce ROM bus contention, but data fetches
+still require bus access.
+
+This matters for localization because:
+
+- **Font data stored in ROM** is inaccessible to the SNES CPU while the GSU is active. If a
+  Super FX game renders text during gameplay (not just during paused menus), the font tiles
+  and text strings must be **pre-loaded into WRAM** before the GSU starts, or the GSU must
+  be halted for the CPU to read ROM.
+- Most Super FX games (_Star Fox_, _Yoshi's Island_, _Doom_, _Stunt Race FX_) are
+  action-oriented with minimal in-game text, so this is rarely a practical barrier. However,
+  if you are patching text rendering into a Super FX game, be aware that ROM reads during
+  GSU-active frames will return open bus.
+- The GSU also has its own **backup RAM** (up to 64 KB on some boards) that is accessible to
+  both the GSU and the SNES CPU (when the GSU is stopped). Modified font data or expanded
+  text could potentially be placed here.
+
+([Super FX -- SNESdev Wiki](https://snes.nesdev.org/wiki/Super_FX),
+[fullsnes -- Super FX chapter](https://problemkaputt.de/fullsnes.htm))
+
 ## References
 
 - SNESdev Wiki -- Tiles: <https://snes.nesdev.org/wiki/Tiles>

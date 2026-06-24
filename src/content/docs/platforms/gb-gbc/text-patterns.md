@@ -242,17 +242,110 @@ render_char(char_code):
 
 ### VWF performance considerations
 
-- **DMG at 4 MHz:** VWF rendering is slow. Writing 16 bytes to VRAM per tile, plus
-  the bit-shifting math, plus the VBlank timing constraint. Practical but limits
-  text display speed.
-- **GBC at 8 MHz (double speed):** Much more comfortable. Most GBC VWF
-  implementations run smoothly. The double-speed mode is a major reason VWF is more
-  common in GBC translations.
-- **VBlank window:** VRAM can only be written during VBlank (~1.1 ms) or when the LCD
-  is off. On DMG, this limits how many tiles you can update per frame. Strategies:
-  - Buffer several tiles and write them all during VBlank
-  - Render text one character per frame (slower but simpler)
-  - Use HDMA on GBC to transfer tile data more efficiently
+- **DMG at ~4 MHz:** VWF rendering is tight. Each character requires bit-shift
+  compositing across two tile buffers (16+ bytes of shift-and-OR per row), and the
+  completed tiles can only be written to VRAM during VBlank (~1.1 ms). Practical,
+  but limits text display to roughly one or two characters per frame at full speed.
+- **GBC double-speed mode (~8 MHz):** Doubles the CPU budget for compositing, making
+  VWF far more comfortable. Most GBC fan-translation VWF engines rely on double-speed
+  mode. See the section below for details.
+- **GBC H-Blank DMA:** Eliminates the VBlank bottleneck for VRAM writes by streaming
+  tiles during H-Blank. See [Tiles and VRAM -- HDMA](./tiles-vram#hdma-vram-dma-transfer-gbc-only)
+  for register details.
+
+### GBC Double-Speed Mode for VWF
+
+The GBC can switch between normal speed (~4.19 MHz, 1 M-cycle ~= 1 microsecond) and
+double speed (~8.39 MHz, 1 M-cycle ~= 0.5 microsecond) via the KEY1 register. This is
+a GBC-only feature; it has no effect on DMG hardware.
+
+Reference: [Pan Docs -- CGB Registers](https://gbdev.io/pandocs/CGB_Registers.html) (CC0)
+
+**KEY1 register (`0xFF4D`):**
+
+| Bit | Read | Write |
+|-----|------|-------|
+| 7 | Current speed (0 = normal, 1 = double) | -- |
+| 6-1 | -- | -- |
+| 0 | -- | 1 = prepare speed switch |
+
+**Switching procedure:**
+
+1. Write `0x01` to KEY1 (`0xFF4D`) to arm the switch
+2. Write `0x30` to JOYP (`0xFF00`) to avoid joypad interference
+3. Write `0x00` to IE (`0xFFFF`) to disable interrupts during the switch
+4. Execute a `STOP` instruction
+
+The CPU halts for approximately 2050 M-cycles (~8200 T-cycles) during the switch.
+After resuming, KEY1 bit 7 reflects the new speed and bit 0 is cleared automatically.
+
+```asm
+; Switch to double-speed mode (GBC)
+  ld a, [$FF4D]
+  bit 7, a
+  jr nz, .already_double   ; already in double speed
+  ld a, $30
+  ldh [$FF00], a           ; JOYP = $30
+  xor a
+  ldh [$FF], a             ; IE = 0, disable interrupts
+  ld a, $01
+  ldh [$4D], a             ; KEY1 = arm speed switch
+  stop                     ; execute switch (~2050 M-cycles pause)
+.already_double
+```
+
+**What runs faster in double-speed mode:**
+
+| Component | Effect |
+|-----------|--------|
+| CPU | ~8.39 MHz (2x instruction throughput) |
+| DIV register | Increments at 32768 Hz (2x normal) |
+| Timer (TIMA) | Frequencies based on system clock, so effectively 2x |
+| Serial transfer | Internal clock runs 2x faster |
+| OAM DMA | Takes same real time (~160 microseconds) but 320 dots instead of 640 |
+
+**What is NOT affected:**
+
+| Component | Behavior |
+|-----------|----------|
+| PPU / LCD | Same timing (scanlines, VBlank duration, H-Blank duration stay the same in real time) |
+| APU / sound | Same tick rate (512 Hz DIV-APU counter compensates for faster DIV) |
+| VRAM DMA (HDMA) | Same real-time transfer rate (~8 microseconds per $10-byte block); costs 16 fast M-cycles instead of 8 normal M-cycles |
+
+**Why this matters for VWF:** The VWF compositing loop (bit-shifting glyph data,
+OR-ing into tile buffers) is pure CPU work. Double-speed mode gives 2x the cycles
+per frame to do this work. Meanwhile, the VBlank and H-Blank windows remain the same
+real-time duration, so the available VRAM-write budget per frame stays constant. The
+net effect is that double-speed gives more time to *prepare* tiles, and H-Blank DMA
+gives more bandwidth to *transfer* them -- together they make full-speed proportional
+text rendering practical on GBC.
+
+### GBC H-Blank DMA for VWF Tile Streaming
+
+On DMG, all VRAM writes must happen during VBlank (~1.1 ms, enough for roughly 40-50
+tile writes by CPU at normal speed). This is a hard cap on how many VWF output tiles
+can be updated per frame.
+
+On GBC, the [HDMA controller](./tiles-vram#hdma-vram-dma-transfer-gbc-only) (registers
+`0xFF51`-`0xFF55`) can transfer **16 bytes (one tile) per H-Blank**, up to 144 tiles
+per frame. For VWF, this means:
+
+1. The VWF engine composes a tile into a 16-byte WRAM buffer
+2. It programs HDMA1-4 with the WRAM source and VRAM destination
+3. It writes HDMA5 with bit 7 set (H-Blank mode) and length = 0 (one $10-byte block)
+4. The transfer completes automatically at the next H-Blank -- no CPU time spent
+5. While the DMA runs, the CPU is free to start compositing the next tile
+
+This pipelining is key: the CPU composes tile N+1 while DMA writes tile N. A VWF
+engine using double-speed mode + H-Blank DMA can comfortably render several
+characters per frame without any visible slowdown.
+
+**Caveats for H-Blank DMA in VWF engines:**
+- Do not initiate an H-Blank DMA (write to `0xFF55`) while already in H-Blank
+  (STAT mode 0). Start the transfer during mode 2 or mode 3, or during VBlank.
+- Do not change the VRAM bank (VBK, `0xFF4F`) or the source ROM/WRAM bank while
+  a transfer is active.
+- If the destination address overflows past `0x9FF0`, the transfer stops prematurely.
 
 ### VWF and tile consumption
 
