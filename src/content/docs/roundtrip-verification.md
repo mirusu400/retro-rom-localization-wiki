@@ -233,10 +233,10 @@ data, verify decompressed content matches and recompressed size fits the origina
 
 ### Tools
 
-- **[ndstool](https://github.com/devkitPro/ndstool)** (devkitPro) for NitroFS extract/rebuild.
-- **[Tinke](https://github.com/pleonex/tinke)** for GUI-based asset browsing and replacement.
-- **[ndspy](https://ndspy.readthedocs.io/)** (Python library) for programmatic NDS ROM manipulation.
-- **[DSDecmp](https://github.com/Barubary/dsdecmp)** for LZ/Huffman/RLE decompression.
+- **[ndstool](https://github.com/devkitPro/ndstool)** (CLI, devkitPro) for NitroFS extract/rebuild -- primary tool.
+- **[ndspy](https://ndspy.readthedocs.io/)** (Python, `pip install ndspy`) for programmatic NDS ROM manipulation.
+- **[DSDecmp](https://github.com/Barubary/dsdecmp)** (CLI) for LZ/Huffman/RLE decompression.
+- **[Tinke](https://github.com/pleonex/tinke)** (GUI alternative) for visual asset browsing and replacement.
 
 ### Extract / reinsert cycle
 

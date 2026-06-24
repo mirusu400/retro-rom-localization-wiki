@@ -93,8 +93,8 @@ Compared to the NES, SNES localization has several advantages:
 
 1. **Identify the mapping mode**: check the header byte at $FFD5 (LoROM or HiROM) to know
    how to convert CPU addresses to file offsets.
-2. **Find the font tiles**: use a tile viewer (YY-CHR, Tile Molester, or the VRAM viewer in
-   bsnes-plus) to locate the font in ROM.
+2. **Find the font tiles**: use `superfamiconv` or a tile dump script (CLI), the VRAM viewer
+   in bsnes-plus, or YY-CHR / Tile Molester (GUI) to locate the font in ROM.
 3. **Find the text**: do a relative search for known strings, then build a `.tbl` file mapping
    byte values to characters.
 4. **Trace the text engine**: set read breakpoints in bsnes-plus on the text data addresses

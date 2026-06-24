@@ -143,7 +143,7 @@ NES games range from trivial to very difficult to localize, depending on:
 ### General approach
 
 1. **Identify the mapper** (iNES header byte 6/7) and understand its banking.
-2. **Find the font** in a tile editor (YY-CHR, Tile Molester, or Mesen2's PPU viewer).
+2. **Find the font** using a tile dump script or `superfamiconv` (CLI), Mesen2's PPU viewer, or a GUI tile editor like YY-CHR if preferred.
 3. **Determine CHR-ROM vs CHR-RAM** (header byte 5).
 4. **Locate text data** using relative search or debugger tracing.
 5. **Build a `.tbl` file** mapping byte values to characters.

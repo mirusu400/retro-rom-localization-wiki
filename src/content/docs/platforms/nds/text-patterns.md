@@ -415,8 +415,8 @@ message file. Common patterns:
   names, file 2 = location names, etc.).
 - Each sub-file uses the same binary message format.
 
-Extract NARC archives with ndstool or Tinke, then process each sub-file
-individually.
+Extract NARC archives with ndstool (CLI) or ndspy (Python); Tinke (GUI) can
+also browse them. Then process each sub-file individually.
 
 ## Practical Localization Workflow
 
@@ -524,14 +524,15 @@ testing). Check:
 
 | Tool | Purpose | Link |
 |------|---------|------|
-| **ndstool** | Extract/rebuild NDS ROMs (NitroFS) | [devkitPro](https://github.com/devkitPro/ndstool) |
-| **CrystalTile2** | Hex editor with NDS-specific features: tile viewer, text search, palette viewer | [romhacking.net](https://www.romhacking.net/utilities/818/) |
-| **Kuriimu2** | Multi-format game text editor with NDS support; handles BMG and many custom formats | [GitHub](https://github.com/FanTranslatorsInternational/Kuriimu2) |
-| **kiwi.ds** | NDS text editor for common message formats | (community tool) |
-| **Tinke** | GUI NDS file browser; can view text in some file types and edit NFTR fonts | [GitHub](https://github.com/pleonex/tinke) |
-| **Custom Python** | Recommended for per-game binary format parsing (`struct` module), encoding conversion, and batch text extraction/insertion | -- |
+| **ndstool (CLI)** | Extract/rebuild NDS ROMs (NitroFS) -- primary tool | [devkitPro](https://github.com/devkitPro/ndstool) |
+| **ndspy (Python)** | Programmatic NitroFS and NARC access (`pip install ndspy`) | [Docs](https://ndspy.readthedocs.io/) |
+| **Custom Python (CLI)** | Recommended for per-game binary format parsing (`struct` module), encoding conversion, and batch text extraction/insertion | -- |
+| **Kuriimu2 (CLI)** | Multi-format game text editor with NDS support; handles BMG and many custom formats | [GitHub](https://github.com/FanTranslatorsInternational/Kuriimu2) |
 | **melonDS** | High-accuracy NDS emulator for testing | [melonDS](https://melonds.kuribo64.net/) |
 | **DeSmuME** | NDS emulator with Lua scripting and debugger for RE work | [DeSmuME](https://desmume.org/) |
+| **CrystalTile2 (GUI alternative)** | Hex editor with NDS-specific features: tile viewer, text search, palette viewer | [romhacking.net](https://www.romhacking.net/utilities/818/) |
+| **Tinke (GUI alternative)** | NDS file browser; can view text in some file types and edit NFTR fonts | [GitHub](https://github.com/pleonex/tinke) |
+| **kiwi.ds (GUI alternative)** | NDS text editor for common message formats | (community tool) |
 
 ## Quick Reference: Identifying Text Format
 

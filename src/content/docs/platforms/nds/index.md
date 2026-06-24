@@ -136,13 +136,14 @@ NDS games vary widely in text engine design, but common patterns include:
 
 | Tool | Purpose | Link |
 |------|---------|------|
-| ndstool | Unpack/rebuild NDS ROMs (NitroFS) | [devkitPro](https://github.com/devkitPro/ndstool) |
-| Tinke | GUI NDS file browser, NFTR/NARC editor | [GitHub](https://github.com/pleonex/tinke) |
-| DSDecmp | Decompress/recompress LZ/Huffman/RLE | [GitHub](https://github.com/Barubary/dsdecmp) |
-| CrystalTile2 | Hex/tile editor with NDS support | [romhacking.net](https://www.romhacking.net/utilities/818/) |
+| ndstool (CLI) | Unpack/rebuild NDS ROMs (NitroFS) -- primary tool | [devkitPro](https://github.com/devkitPro/ndstool) |
+| ndspy (Python) | Programmatic NitroFS access and ROM manipulation (`pip install ndspy`) | [Docs](https://ndspy.readthedocs.io/) |
+| DSDecmp (CLI) | Decompress/recompress LZ/Huffman/RLE | [GitHub](https://github.com/Barubary/dsdecmp) |
 | melonDS | High-accuracy NDS emulator | [melonDS](https://melonds.kuribo64.net/) |
 | DeSmuME | NDS emulator with Lua scripting, CLI | [DeSmuME](https://desmume.org/) |
-| devkitARM | ARM cross-compiler (ASM patches, custom code) | [devkitPro](https://devkitpro.org/) |
+| devkitARM (CLI) | ARM cross-compiler (ASM patches, custom code) | [devkitPro](https://devkitpro.org/) |
+| Tinke (GUI alternative) | NDS file browser, NFTR/NARC editor | [GitHub](https://github.com/pleonex/tinke) |
+| CrystalTile2 (GUI alternative) | Hex/tile editor with NDS support | [GitHub](https://github.com/mirusu400/CrystalTile25) |
 
 ## References
 

@@ -477,8 +477,10 @@ NDS games often store graphics in standardized Nitro SDK file formats:
 | NANR | `"RNAN"` | Animation sequences |
 
 These files follow the same Nitro container format as [NFTR](./fonts/), with
-a generic header followed by tagged sections. Tools like **Tinke** can browse
-and edit these files within the [NitroFS filesystem](./filesystem/).
+a generic header followed by tagged sections. Use **ndstool** (CLI) to extract
+them from the NitroFS filesystem, or **ndspy** (Python, `pip install ndspy`)
+for programmatic access. **Tinke** (GUI alternative) can also browse and edit
+these files within the [NitroFS filesystem](./filesystem/).
 
 ## Practical Localization Checklist
 

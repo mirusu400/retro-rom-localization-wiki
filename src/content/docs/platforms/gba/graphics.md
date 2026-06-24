@@ -344,8 +344,9 @@ Font tiles often start with common characters (space, then A-Z or hiragana). In 
 
 - At 4bpp, a blank (space) tile is 32 bytes of `0x00`.
 - Look for a sequence of 32-byte `0x00` followed by recognizable 4bpp patterns.
-- Tools like **Tile Molester** or **YY-CHR** can open a ROM and display it as raw tile data
-  — scrub through the ROM visually to find font graphics.
+- Use a script or CLI tool to dump a ROM region as raw 4bpp tile data for inspection (e.g.,
+  `superfamiconv` supports GBA-compatible 4bpp linear formats). Tile Molester or YY-CHR (GUI)
+  can also open a ROM and display it as raw tile data for visual scrubbing.
 
 ### Method 3: breakpoint on VRAM writes
 

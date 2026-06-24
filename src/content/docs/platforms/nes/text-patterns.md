@@ -328,7 +328,8 @@ done by the CPU writing bytes to PPU registers. This means:
 ### Step 2: Find the font
 
 ```
-1. Open ROM in a tile editor (2bpp NES mode).
+1. Dump tiles with superfamiconv or xxd (CLI, 2bpp NES mode),
+   or open ROM in a GUI tile editor (YY-CHR) if preferred.
 2. For CHR-ROM: scroll to the CHR section (after PRG-ROM in the file).
 3. For CHR-RAM: search through PRG-ROM for tile-like data.
 4. Alternative: use Mesen2/FCEUX PPU viewer during gameplay.
@@ -448,9 +449,10 @@ values in the character-table range, terminated by `$FF`/`$00`). Compressed
 regions look like high-entropy noise --- no obvious repeating structure when
 viewed in a hex editor.
 
-**Tile editor inspection.** Open the ROM in a tile viewer (YY-CHR, Tile
-Molester) in 2bpp NES mode. Uncompressed font tiles will be visually
-recognizable. Compressed tile data appears as garbage.
+**Tile inspection.** Dump tiles with `superfamiconv` or `xxd` (CLI) and look
+for recognizable 2bpp glyph patterns, or open the ROM in a GUI tile viewer
+(YY-CHR, Tile Molester) in 2bpp NES mode. Uncompressed font tiles will be
+visually recognizable. Compressed tile data appears as garbage.
 
 **Decompressor tracing.** The most reliable method:
 
@@ -508,14 +510,16 @@ tile runs compress extremely well.
 
 | Tool | Purpose |
 |---|---|
-| **Mesen2** | Debugger + PPU viewer + Lua scripting; best all-in-one for NES RE |
-| **FCEUX** | Debugger + PPU viewer + Lua; strong NES-specific tooling |
-| **YY-CHR** | Tile editor (view/edit fonts in 2bpp NES format) |
-| **Tile Molester** | Alternative tile editor (Java, cross-platform) |
-| **Cartographer** | `.tbl`-based text dumper |
-| **Atlas** | `.tbl`-based text inserter with pointer recalculation |
-| **ca65 / ld65** (cc65) | 6502 assembler/linker for ASM patches |
-| **Flips** | Create IPS/BPS patch files from modified ROMs |
+| **Mesen2** | Debugger + PPU viewer + Lua scripting; best all-in-one for NES RE (CLI/GUI) |
+| **FCEUX** | Debugger + PPU viewer + Lua; strong NES-specific tooling (CLI/GUI) |
+| **superfamiconv** | Tile/palette/map conversion (CLI) |
+| **xxd** | Hex inspection and raw tile-byte analysis (CLI) |
+| **Cartographer** | `.tbl`-based text dumper (CLI) |
+| **Atlas** | `.tbl`-based text inserter with pointer recalculation (CLI) |
+| **ca65 / ld65** (cc65) | 6502 assembler/linker for ASM patches (CLI) |
+| **Flips** | Create IPS/BPS patch files from modified ROMs (CLI) |
+| **YY-CHR** | Tile editor --- view/edit fonts in 2bpp NES format (GUI) |
+| **Tile Molester** | Alternative tile editor, Java, cross-platform (GUI) |
 
 See [Tools](/retro-rom-localization-wiki/tools/) for installation details.
 

@@ -254,14 +254,20 @@ per scanline or groups of scanlines.
 
 ## Finding font tiles in a ROM
 
-### Method 1: tile viewer
+### Method 1: CLI tile dump
 
-Open the ROM in a tile editor (YY-CHR, Tile Molester) and set the format to:
-- **2bpp SNES** (planar) for most fonts
-- **4bpp SNES** (planar) if the font has more than 4 colors
+Use `superfamiconv` (CLI) to decode raw tile data from a ROM region into a PNG for
+inspection:
 
-Scroll through the ROM looking for recognizable character shapes (Latin alphabet, kana,
-kanji). Note the file offset.
+```bash
+# Extract a region of ROM as 2bpp tiles and view the output PNG
+dd if=game.sfc bs=1 skip=$((0x10000)) count=$((0x1000)) of=font_region.bin
+superfamiconv tiles -i font_region.bin -o font_preview.png -B 2 -W 8 -H 8 --no-flip
+```
+
+Alternatively, open the ROM in a tile editor such as YY-CHR or Tile Molester (GUI) and set
+the format to **2bpp SNES** (planar) or **4bpp SNES** (planar). Scroll through looking for
+recognizable character shapes and note the file offset.
 
 ### Method 2: VRAM viewer in emulator
 

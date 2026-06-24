@@ -33,12 +33,13 @@ after it is not.
    [platform page](/retro-rom-localization-wiki/platforms/nes/) for offsets.
 2. **Compute and record checksums.** CRC32 and SHA-1 of the unmodified ROM. This is your
    "known-good" baseline; every tool and patch description should reference it.
-3. **Open the ROM in a tile editor** (YY-CHR, Tile Molester, or `rgbgfx` for GB). Scan for the
-   font tiles — they are usually visually obvious as rows of Latin glyphs. Note the offset and
-   bit-depth (1bpp, 2bpp, 4bpp).
-4. **Open the ROM in a hex editor** (ImHex, HxD, `xxd`). Search for known strings (game title,
-   menu items) using both ASCII and the game's custom encoding. If ASCII fails, you will need a
-   relative search (see Phase 2).
+3. **Inspect tiles** using a tile dump script, `superfamiconv`, or `rgbgfx` (CLI), or a GUI tile
+   editor like YY-CHR / Tile Molester if preferred. Scan for the font tiles — they are usually
+   visually obvious as rows of Latin glyphs. Note the offset and bit-depth (1bpp, 2bpp, 4bpp).
+4. **Inspect hex data** with `xxd` or a Python hex-inspection script (CLI), or a GUI hex editor
+   like ImHex / HxD if preferred. Search for known strings (game title, menu items) using both
+   ASCII and the game's custom encoding. If ASCII fails, you will need a relative search
+   (see Phase 2).
 
 **Output of this phase:** ROM identity (system, mapper, checksum), font tile offset and format,
 and a rough idea of where text lives.

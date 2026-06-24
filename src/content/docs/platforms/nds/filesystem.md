@@ -327,9 +327,11 @@ NARC files are commonly used to group related assets:
 - Sprite animation frames
 
 The NARC format wraps FNT + FAT + file data in a standard Nitro container with
-a `"NARC"` magic signature. Tools like Tinke can browse and extract NARC contents.
-To edit files inside a NARC, you extract the NARC, modify the inner files, and
-rebuild the NARC before reinserting it into the ROM.
+a `"NARC"` magic signature. Use ndstool (CLI) or ndspy (Python, `pip install
+ndspy`) to extract and rebuild NARC contents programmatically; Tinke (GUI) can
+also browse and extract them interactively. To edit files inside a NARC, you
+extract the NARC, modify the inner files, and rebuild the NARC before
+reinserting it into the ROM.
 
 ## Practical Tips for Localization
 

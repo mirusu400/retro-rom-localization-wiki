@@ -34,12 +34,13 @@ build modified ROMs.
 NDS ROMs contain a **NitroFS** filesystem (FNT + FAT tables) that organizes game assets into
 files and directories, much like a disc image.
 
-| Tool | Description | Link |
-|------|-------------|------|
-| **ndstool** | CLI tool to unpack an NDS ROM into its NitroFS folder structure and rebuild it. Part of devkitPro. | [github.com/devkitPro/ndstool](https://github.com/devkitPro/ndstool) |
-| **Tinke** | GUI NDS asset browser. Can view/replace individual files (graphics, fonts, text). Useful for exploration alongside ndstool. | [github.com/pleonex/tinke](https://github.com/pleonex/tinke) |
-| **CrystalTile2** | All-in-one NDS ROM editor combining hex editor, tile viewer/editor, ARM disassembler, NitroFS browser, NARC explorer, and compression tools. Supports non-standard tile sizes and multiple bit-depths. Originally Chinese; English translation by cory1492 and FAST6191. | [romhacking.net/utilities/818](https://www.romhacking.net/utilities/818/) |
-| **NitroExplorer2** | GUI NDS ROM filesystem browser and editor. Can extract and replace files regardless of size changes, with built-in LZ77 compression support. Handles cases where ndstool fails to rebuild. | [gbatemp.net/download/nitroexplorer.7301](https://gbatemp.net/download/nitroexplorer.7301/) |
+| Tool | Type | Description | Link |
+|------|------|-------------|------|
+| **ndstool** | CLI | Unpack an NDS ROM into its NitroFS folder structure and rebuild it. Part of devkitPro. The primary CLI tool for NDS ROM manipulation. | [github.com/devkitPro/ndstool](https://github.com/devkitPro/ndstool) |
+| **ndspy** | Python lib | Python library for reading and writing NDS ROM files, NARC archives, NFTR fonts, BMG text, SDAT sound, and more. Scriptable and pip-installable. | [github.com/RoadrunnerWMC/ndspy](https://github.com/RoadrunnerWMC/ndspy) |
+| **Tinke** | GUI alternative | NDS asset browser. Can view/replace individual files (graphics, fonts, text). Useful for visual exploration alongside ndstool. | [github.com/pleonex/tinke](https://github.com/pleonex/tinke) |
+| **CrystalTile2** | GUI alternative | All-in-one NDS ROM editor combining hex editor, tile viewer/editor, ARM disassembler, NitroFS browser, NARC explorer, and compression tools. Originally Chinese; English translation available. | [romhacking.net/utilities/818](https://www.romhacking.net/utilities/818/) |
+| **NitroExplorer2** | GUI alternative | NDS ROM filesystem browser and editor. Can extract and replace files regardless of size changes, with built-in LZ77 compression. Handles cases where ndstool fails to rebuild. | [gbatemp.net/download/nitroexplorer.7301](https://gbatemp.net/download/nitroexplorer.7301/) |
 
 ### ndstool usage
 
@@ -56,17 +57,43 @@ ndstool -c modified.nds -9 arm9.bin -7 arm7.bin -y9 y9.bin -y7 y7.bin \
 The `-d data` directory mirrors the NitroFS filesystem. Replace files inside `data/`, then
 rebuild.
 
+### ndspy usage
+
+```bash
+pip install ndspy
+```
+
+```python
+import ndspy.rom, ndspy.narc
+
+# Open a ROM and list NitroFS files
+rom = ndspy.rom.NintendoDSRom.fromFile("game.nds")
+for name in rom.filenames:
+    print(name)
+
+# Extract and replace a file
+data = rom.getFileByName("data/font/main.nftr")
+# ... modify data ...
+rom.setFileByName("data/font/main.nftr", modified_data)
+rom.saveToFile("modified.nds")
+```
+
+ndspy is particularly useful for batch scripting (extracting all text files, patching fonts
+programmatically, etc.) where ndstool's unpack-edit-rebuild cycle is too coarse.
+
 ## Graphics, tiles, and fonts
 
 Tools for converting between image formats (PNG) and the console's native tile format.
+CLI tools are listed first; GUI alternatives follow.
 
-| Tool | Description | Link |
-|------|-------------|------|
-| **rgbgfx** | PNG to/from Game Boy 2bpp tile data. Part of RGBDS. Handles tile deduplication and palettes. | [rgbds.gbdev.io/docs/rgbgfx.1](https://rgbds.gbdev.io/docs/rgbgfx.1) |
-| **superfamiconv** | CLI tile/palette/map converter for SNES and GB. Handles 2bpp/4bpp/8bpp, palette reduction, and tile-map generation. | [github.com/Optiroc/SuperFamiconv](https://github.com/Optiroc/SuperFamiconv) |
-| **Tile Molester** | Java-based GUI tile editor. Opens any ROM and displays raw tile data at configurable bit-depths. Good for locating font tiles visually. | (use a current fork; original is unmaintained) |
-| **YY-CHR** | Windows GUI tile/character editor. Popular in the NES/SNES hacking community for font editing. | (community builds available on RHDN) |
-| **NFTREdit** | NDS NFTR (Nitro FonT Resource) font editor. Preview text in-font, view/edit character maps, import/export tile bitmaps, change tile dimensions. By DarthNemesis; requires .NET. | [gbatemp.net/download/nftredit.29196](https://gbatemp.net/download/nftredit.29196/) |
+| Tool | Type | Description | Link |
+|------|------|-------------|------|
+| **rgbgfx** | CLI | PNG to/from Game Boy 2bpp tile data. Part of RGBDS. Handles tile deduplication and palettes. | [rgbds.gbdev.io/docs/rgbgfx.1](https://rgbds.gbdev.io/docs/rgbgfx.1) |
+| **superfamiconv** | CLI | Tile/palette/map converter for SNES and GB. Handles 2bpp/4bpp/8bpp, palette reduction, and tile-map generation. | [github.com/Optiroc/SuperFamiconv](https://github.com/Optiroc/SuperFamiconv) |
+| **tile_dump.py** | Python script | Universal tile dumper/repacker: ROM to PNG and PNG to ROM. Supports 1/2/4/8 bpp. No dependencies beyond Pillow. See [Encoding and Fonts -- CLI tile dumping](/retro-rom-localization-wiki/encoding-and-fonts/#cli-tile-dumping) for the full script. | -- |
+| **Tile Molester** | GUI alternative | Java-based tile editor. Opens any ROM and displays raw tile data at configurable bit-depths. Useful for initial visual exploration. | (use a current fork; original is unmaintained) |
+| **YY-CHR** | GUI alternative | Windows tile/character editor. Popular in the NES/SNES hacking community. Convenient for quick manual edits but not scriptable. | (community builds available on RHDN) |
+| **NFTREdit** | GUI alternative | NDS NFTR font editor. Preview text in-font, view/edit character maps, import/export tile bitmaps. Requires .NET. | [gbatemp.net/download/nftredit.29196](https://gbatemp.net/download/nftredit.29196/) |
 
 ### rgbgfx usage
 
@@ -229,11 +256,11 @@ Quick reference for which tools apply to each target platform.
 | Task | NES | SNES | GB/GBC | GBA | NDS |
 |------|-----|------|--------|-----|-----|
 | Assembler | cc65, 64tass | asar, 64tass | RGBDS | devkitARM | devkitARM |
-| Tile conversion | YY-CHR | superfamiconv, YY-CHR | rgbgfx | superfamiconv | Tinke, CrystalTile2 |
-| Font editing | YY-CHR | YY-CHR | — | — | NFTREdit, Kuriimu2 |
+| Tile conversion | tile_dump.py, superfamiconv | superfamiconv, tile_dump.py | rgbgfx, tile_dump.py | superfamiconv, tile_dump.py | tile_dump.py, ndspy |
+| Font editing | tile_dump.py + image editor | tile_dump.py + image editor | rgbgfx | tile_dump.py + image editor | ndspy, NFTREdit (GUI) |
 | Text dump/insert | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas | Cartographer/Atlas, Kuriimu2, custom |
 | Compression | (custom) | (custom) | (custom) | gbalzss | DSDecmp, gbalzss |
-| ROM unpack | — | — | — | — | ndstool, NitroExplorer2, CrystalTile2 |
+| ROM unpack | — | — | — | — | ndstool, ndspy |
 | Debugger emu | FCEUX, Mesen2 | bsnes-plus, Mesen2 | mGBA, SameBoy, Mesen2 | mGBA, Mesen2 | DeSmuME, melonDS |
 | Patching | Flips | Flips | Flips | Flips | xdelta3, Flips |
 | RE / disasm | Ghidra, radare2 | Ghidra, radare2 | Ghidra (GhidraBoy), radare2 | Ghidra, radare2 | Ghidra, radare2 |

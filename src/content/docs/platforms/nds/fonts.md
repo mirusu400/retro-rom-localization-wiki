@@ -504,10 +504,11 @@ typically use 2 or 4 bpp for anti-aliased rendering.
 
 | Tool | Use |
 |------|-----|
-| **Tinke** | GUI tool that can open NFTR files, view glyphs, edit widths, and export/import glyph bitmaps. Most accessible option. |
-| **NFTREdit** | Community tool specifically for NFTR editing (if available for your target game's format version). |
-| **Custom Python** | For batch operations (adding hundreds of glyphs), scripted NFTR editing is often more practical. Parse the binary format, append glyph data, and regenerate the file. |
-| **NitroExplorer2** | Can extract NFTR files from NARC archives for editing. |
+| **Custom Python (CLI)** | Recommended for batch operations (adding hundreds of glyphs). Parse the binary format documented above, append glyph data, and regenerate the file. The `struct` module is sufficient. |
+| **ndspy (Python)** | Programmatic NitroFS and NARC access (`pip install ndspy`). Use to extract NFTR files from NARC archives and manipulate ROM contents in scripts. |
+| **Tinke (GUI alternative)** | Can open NFTR files, view glyphs, edit widths, and export/import glyph bitmaps. Useful for visual inspection. |
+| **NFTREdit (GUI alternative)** | Community tool specifically for NFTR editing (if available for your target game's format version). |
+| **NitroExplorer2 (GUI alternative)** | Can extract NFTR files from NARC archives for editing. |
 
 ## References
 

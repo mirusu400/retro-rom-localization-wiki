@@ -176,6 +176,191 @@ store only the components (~67 jamo for Korean) and compose full syllable glyphs
 time. This dramatically reduces storage but requires a composition routine in the text engine.
 See [Korean / Hangul](/retro-rom-localization-wiki/languages/korean/) for details.
 
+## CLI tile dumping
+
+GUI tile editors (Tile Molester, YY-CHR) are convenient for browsing, but a CLI script is
+faster for batch work and integrates into scripted pipelines. The following Python script
+converts raw tile data from a ROM into a PNG grid image using Pillow.
+
+### tile_dump.py -- ROM tiles to PNG
+
+```python
+#!/usr/bin/env python3
+"""Dump raw ROM tile data to a PNG grid. Supports 1/2/4/8 bpp."""
+import argparse, struct, sys
+from PIL import Image
+
+BPP_MAP = {"1bpp": 1, "2bpp": 2, "4bpp": 4, "8bpp": 8}
+
+def decode_tile(data: bytes, bpp: int) -> list[list[int]]:
+    """Decode one 8x8 tile. Returns 8 rows of 8 pixel values."""
+    tile = [[0]*8 for _ in range(8)]
+    if bpp == 2:  # NES/GB interleaved: low byte, high byte per row
+        for y in range(8):
+            lo, hi = data[y], data[y + 8]
+            for x in range(8):
+                tile[y][7-x] = ((lo >> x) & 1) | (((hi >> x) & 1) << 1)
+    elif bpp == 4:  # SNES/GBA: two 2bpp planes interleaved
+        for y in range(8):
+            b0, b1 = data[2*y], data[2*y+1]
+            b2, b3 = data[16 + 2*y], data[16 + 2*y+1]
+            for x in range(8):
+                tile[y][7-x] = (((b0>>x)&1) | (((b1>>x)&1)<<1)
+                    | (((b2>>x)&1)<<2) | (((b3>>x)&1)<<3))
+    elif bpp == 8:  # GBA/NDS linear: one byte per pixel
+        for y in range(8):
+            for x in range(8):
+                tile[y][x] = data[y*8 + x]
+    elif bpp == 1:  # 1bpp linear: one bit per pixel
+        for y in range(8):
+            b = data[y]
+            for x in range(8):
+                tile[y][7-x] = (b >> x) & 1
+    return tile
+
+def main():
+    p = argparse.ArgumentParser(description="Dump ROM tiles to PNG")
+    p.add_argument("rom", help="ROM file path")
+    p.add_argument("offset", help="Start offset in ROM (hex with 0x prefix)")
+    p.add_argument("count", type=int, help="Number of tiles to dump")
+    p.add_argument("bpp", choices=BPP_MAP, help="Bit depth: 1bpp 2bpp 4bpp 8bpp")
+    p.add_argument("output", help="Output PNG path")
+    p.add_argument("--cols", type=int, default=16, help="Tiles per row (default 16)")
+    args = p.parse_args()
+
+    bpp = BPP_MAP[args.bpp]
+    tile_bytes = 8 * bpp  # bytes per 8x8 tile
+    offset = int(args.offset, 16)
+    scale = 255 // ((1 << bpp) - 1)  # map max pixel value to 255
+
+    with open(args.rom, "rb") as f:
+        f.seek(offset)
+        raw = f.read(tile_bytes * args.count)
+
+    cols = args.cols
+    rows = (args.count + cols - 1) // cols
+    img = Image.new("L", (cols * 8, rows * 8), 0)
+    for i in range(args.count):
+        chunk = raw[i*tile_bytes:(i+1)*tile_bytes]
+        if len(chunk) < tile_bytes:
+            break
+        tile = decode_tile(chunk, bpp)
+        tx, ty = (i % cols) * 8, (i // cols) * 8
+        for y in range(8):
+            for x in range(8):
+                img.putpixel((tx+x, ty+y), tile[y][x] * scale)
+    img.save(args.output)
+    print(f"Wrote {args.output} ({cols*8}x{rows*8}, {args.count} tiles, {args.bpp})")
+
+if __name__ == "__main__":
+    main()
+```
+
+### Usage examples
+
+```bash
+# NES: dump 256 tiles (2bpp) from CHR-ROM at offset 0x20010
+python tile_dump.py rom.nes 0x20010 256 2bpp nes_font.png
+
+# GB: dump 128 tiles (2bpp) from a font bank
+python tile_dump.py rom.gb 0x40000 128 2bpp gb_font.png
+
+# SNES: dump 256 tiles (4bpp)
+python tile_dump.py rom.sfc 0x100000 256 4bpp snes_font.png
+
+# GBA: dump 256 tiles (4bpp) at ROM offset 0x3A000
+python tile_dump.py rom.gba 0x3A000 256 4bpp gba_font.png
+
+# NDS: dump 256 tiles (4bpp) from an extracted font file
+python tile_dump.py font.bin 0x0 256 4bpp nds_font_4bpp.png
+
+# NDS: dump 128 tiles (8bpp)
+python tile_dump.py font.bin 0x0 128 8bpp nds_font_8bpp.png
+```
+
+### Reverse: PNG to raw tile data
+
+The reverse operation (reinserting edited tiles) follows the same logic in reverse: read
+each 8x8 block from the PNG, quantize pixel values back to the original bit-depth range,
+and encode the bitplanes. A minimal reverse script:
+
+```python
+#!/usr/bin/env python3
+"""Convert a PNG grid back to raw tile data. Counterpart to tile_dump.py."""
+import argparse
+from PIL import Image
+
+BPP_MAP = {"1bpp": 1, "2bpp": 2, "4bpp": 4, "8bpp": 8}
+
+def encode_tile(pixels: list[list[int]], bpp: int) -> bytes:
+    """Encode one 8x8 tile from pixel values to raw bytes."""
+    out = bytearray()
+    if bpp == 2:
+        lo_plane, hi_plane = bytearray(8), bytearray(8)
+        for y in range(8):
+            for x in range(8):
+                v = pixels[y][x]
+                lo_plane[y] |= ((v & 1) << (7 - x))
+                hi_plane[y] |= (((v >> 1) & 1) << (7 - x))
+        out = lo_plane + hi_plane
+    elif bpp == 4:
+        planes = [bytearray(8) for _ in range(4)]
+        for y in range(8):
+            for x in range(8):
+                v = pixels[y][x]
+                for p in range(4):
+                    planes[p][y] |= (((v >> p) & 1) << (7 - x))
+        out = bytearray()
+        for y in range(8):
+            out += bytes([planes[0][y], planes[1][y]])
+        for y in range(8):
+            out += bytes([planes[2][y], planes[3][y]])
+    elif bpp == 8:
+        for y in range(8):
+            for x in range(8):
+                out.append(pixels[y][x])
+    elif bpp == 1:
+        for y in range(8):
+            b = 0
+            for x in range(8):
+                b |= ((pixels[y][x] & 1) << (7 - x))
+            out.append(b)
+    return bytes(out)
+
+def main():
+    p = argparse.ArgumentParser(description="PNG grid to raw tile data")
+    p.add_argument("png", help="Input PNG path")
+    p.add_argument("bpp", choices=BPP_MAP, help="Bit depth")
+    p.add_argument("output", help="Output raw tile file")
+    args = p.parse_args()
+
+    bpp = BPP_MAP[args.bpp]
+    scale = (1 << bpp) - 1
+    img = Image.open(args.png).convert("L")
+    w, h = img.size
+    cols, rows = w // 8, h // 8
+
+    with open(args.output, "wb") as f:
+        for ty in range(rows):
+            for tx in range(cols):
+                pixels = []
+                for y in range(8):
+                    row = []
+                    for x in range(8):
+                        v = img.getpixel((tx*8+x, ty*8+y))
+                        row.append(round(v * scale / 255))
+                    pixels.append(row)
+                f.write(encode_tile(pixels, bpp))
+    print(f"Wrote {args.output} ({cols*rows} tiles, {args.bpp})")
+
+if __name__ == "__main__":
+    main()
+```
+
+Use `tile_dump.py` to extract, edit the PNG in any image editor, then `tile_repack.py` to
+produce the raw binary for reinsertion. This roundtrip replaces GUI-only tile editors for
+most font-editing workflows.
+
 ## Font design considerations
 
 - **Readability threshold.** Most scripts have a minimum pixel size below which they become

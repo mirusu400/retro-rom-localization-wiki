@@ -219,8 +219,9 @@ This is the most important distinction for localization font work:
 - Tile data is in a **read-only** ROM chip on the cartridge.
 - The PPU reads tiles directly from CHR-ROM.
 - Tiles **cannot be changed at runtime**.
-- To modify the font, edit the CHR-ROM data in the ROM file directly (using a tile
-  editor like YY-CHR or Tile Molester).
+- To modify the font, edit the CHR-ROM data in the ROM file directly using
+  `superfamiconv` or a custom script (CLI), or a GUI tile editor like YY-CHR
+  or Tile Molester if preferred.
 - **Limitation:** You are restricted to the existing number of tile slots. If the
   original game uses 80 tiles for Japanese kana/kanji, you can replace those 80 tiles
   with your target script's characters --- but you cannot add more.
@@ -274,9 +275,12 @@ Some games use 8x16 sprites for taller text characters.
 
 ## Practical: finding the font
 
-### Method 1: tile editor
+### Method 1: tile dump (CLI) or tile editor (GUI)
 
-1. Open the ROM in **YY-CHR**, **Tile Molester**, or similar tile editor.
+1. Dump tiles to PNG with `superfamiconv` or a custom Python script, or inspect
+   raw tile bytes with `xxd` (search for 16-byte-aligned blocks in 2bpp format).
+   Alternatively, open the ROM in a GUI tile editor such as **YY-CHR** or
+   **Tile Molester** if preferred.
 2. Set the format to **NES 2bpp** (8x8 tiles).
 3. Scroll through the ROM looking for recognizable character glyphs.
 4. For **CHR-ROM** games: the font is typically near the end of the ROM file (in the
