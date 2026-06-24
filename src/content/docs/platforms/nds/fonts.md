@@ -2,7 +2,7 @@
 title: "NDS Fonts (NFTR)"
 description: "NFTR (NitroFont Resource) format: header, FINF font info, PLGC/CGLP glyph bitmaps, HDWC/CWDH character widths, and PAMC/CMAP character mapping -- how to add glyphs for new scripts."
 sidebar:
-  order: 4
+  order: 3
 ---
 
 Many NDS games use the **NFTR (Nitro Font Resource)** format for bitmap fonts.
