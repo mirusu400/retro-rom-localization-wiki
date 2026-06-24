@@ -1,0 +1,32 @@
+---
+title: Retro Game Localization Wiki
+description: Hardware facts and working methods for translating retro games into any target language.
+template: splash
+hero:
+  tagline: ROM, filesystem, and game-structure knowledge for retro-game fan translation.
+  actions:
+    - text: Get Started
+      link: /retro-rom-localization-wiki/pipeline/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/mirusu400/retro-rom-localization-wiki
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="Localization Pipeline" icon="list-format">
+    The end-to-end workflow from ROM analysis to patch distribution.
+  </Card>
+  <Card title="Platform Guides" icon="laptop">
+    NES, SNES, GB/GBC, GBA, and NDS — ROM layout, memory maps, and font systems.
+  </Card>
+  <Card title="Text & Encoding" icon="document">
+    Reverse-engineering text engines, charsets, variable-width fonts, and pointer tables.
+  </Card>
+  <Card title="Tools" icon="setting">
+    Assemblers, tile editors, text inserters, emulators, and patching utilities.
+  </Card>
+</CardGrid>

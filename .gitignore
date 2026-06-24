@@ -1,0 +1,32 @@
+# Build output
+dist/
+
+# Node
+node_modules/
+
+# Astro
+.astro/
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ROMs and copyrighted assets (never commit)
+*.nes
+*.smc
+*.sfc
+*.gb
+*.gbc
+*.gba
+*.nds
+*.rom
+*.bin
+*.sav
+*.srm
+*.ips
+*.bps
+*.xdelta
